@@ -1,0 +1,406 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// 1. KULLANICI VE KİMLİK (USER & IDENTITY)
+// ==========================================
+model User {
+  id            String    @id @default(uuid())
+  yahooId       String?   @unique // Yahoo ile giriş yapmayanlar için opsiyonel
+  email         String    @unique // E-posta artık zorunlu ve benzersiz
+  emailVerified DateTime? // E-posta doğrulama tarihi
+  password      String?   // Şifre (Hashlenmiş)
+  firstName     String?   // Gerçek Ad
+  lastName      String?   // Gerçek Soyad
+  birthDate     DateTime? // Doğum Tarihi
+  username      String?
+  avatarUrl     String?
+  bio           String?   // Profil yazısı
+
+  // Ekonomi & İtibar
+  credits       Int       @default(1000) // Sanal Para
+  reputation    Int       @default(50)   // Güven Puanı (0-100)
+
+  // Güvenlik (OAuth Tokenları - Offline işlem için şart)
+  accessToken   String?   @db.Text
+  refreshToken  String?   @db.Text
+  tokenExpires  BigInt?
+
+  // İlişkiler
+  teams         Team[]
+  ledgers       Ledger[]      // Cüzdan Geçmişi
+  notifications Notification[]
+  
+  // [YENİ] Alarm ve Analiz
+  watchlist     PlayerWatchlist[] // Oyuncu Alarmları
+  savedAnalyses SavedAnalysis[]   // Kaydedilen Raporlar
+
+  // Sosyal
+  sentRequests     Friendship[] @relation("Sender")
+  receivedRequests Friendship[] @relation("Receiver")
+  
+  // Oyun İçi
+  tradesInitiated  Trade[]      @relation("TradeInitiator")
+  tradesReceived   Trade[]      @relation("TradeTarget")
+  betsInitiated    Bet[]        
+  betsReceived     Bet[]        @relation("BetOpponent")
+
+  // İletişim
+  messages         Message[]    // Gönderilen mesajlar
+  authoredComments Comment[]    @relation("CommentAuthor") // Yazdığı yorumlar
+  profileComments  Comment[]    @relation("ProfileOwner")  // Profiline gelen yorumlar
+
+  // Klan
+  clanMembers      ClanMember[]
+  ownedClans       Clan[]       @relation("ClanOwner")
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// ==========================================
+// 2. YAHOO SENKRONİZASYON VE GEÇMİŞ (SYNC ENGINE)
+// ==========================================
+
+// Oyun Tanımı (Örn: NBA 2024, NFL 2023)
+model Game {
+  id           String   @id // Yahoo Game Key (örn: "418")
+  code         String   // "nba", "nfl"
+  season       Int      // 2024
+  leagues      League[]
+  players      Player[]
+}
+
+model League {
+  id           String   @id // Yahoo League Key (örn: "418.l.12345")
+  gameId       String
+  name         String
+  numTeams     Int
+  currentWeek  Int      @default(1)
+  scoringType  String   // "head", "roto", "point"
+  
+  // Lig Ayarları (Hangi istatistikler kullanılıyor? JSON)
+  settings     Json?    
+  
+  game         Game     @relation(fields: [gameId], references: [id])
+  teams        Team[]
+  matchups     Matchup[] // Fikstür ve Geçmiş
+  messages     Message[] // Lig Sohbet Odası
+  
+  lastSync     DateTime  @default(now())
+}
+
+model Team {
+  id           String   @id // Yahoo Team Key
+  leagueId     String
+  managerId    String
+  name         String
+  logoUrl      String?
+  
+  // Puan Durumu
+  wins         Int      @default(0)
+  losses       Int      @default(0)
+  ties         Int      @default(0)
+  rank         Int?
+  
+  // Anlık Kadro (JSON olarak tutuyoruz)
+  // [{ playerId: "nba.p.123", position: "PG", status: "ACT" }]
+  roster       Json?    
+  
+  league       League   @relation(fields: [leagueId], references: [id])
+  manager      User     @relation(fields: [managerId], references: [id])
+  
+  // Eşleşmeler (Ev Sahibi / Deplasman)
+  homeMatchups Matchup[] @relation("HomeTeam")
+  awayMatchups Matchup[] @relation("AwayTeam")
+}
+
+// Haftalık Maçlar ve Geçmiş (Matchup History)
+model Matchup {
+  id           String   @id @default(uuid())
+  leagueId     String
+  week         Int      // Hangi Hafta?
+  status       String   // "pre" (Başlamadı), "live" (Canlı), "finished" (Bitti - Geçmiş)
+  
+  teamAId      String
+  teamBId      String
+  teamAScore   Float    @default(0.0)
+  teamBScore   Float    @default(0.0)
+  winnerTeamId String?  // Maç bitince kazanan buraya yazılır
+  
+  teamA        Team     @relation("HomeTeam", fields: [teamAId], references: [id])
+  teamB        Team     @relation("AwayTeam", fields: [teamBId], references: [id])
+  league       League   @relation(fields: [leagueId], references: [id])
+  
+  bets         Bet[]    // Bu maça oynanan bahisler
+  
+  @@unique([leagueId, week, teamAId, teamBId]) 
+}
+
+// ==========================================
+// 3. SPORCU BİLGİ VE ANALİZ (PLAYER HUB)
+// ==========================================
+model Player {
+  id            String   @id // Yahoo Player Key (örn: "nba.p.3704")
+  gameId        String   // Hangi oyun? (nba/nfl)
+  fullName      String
+  status        String?  // "Healthy", "IR", "GTD"
+  editorialTeam String?  // "LAL", "GSW"
+  photoUrl      String?
+  
+  primaryPos    String?  // "PG"
+  eligiblePos   Json?    // ["PG", "SG", "SF"]
+  
+  // Sezon Ortalamaları
+  stats         Json?    // { "ppg": 25.4, "rpg": 8.2 }
+  
+  // İlişkiler
+  game          Game            @relation(fields: [gameId], references: [id])
+  gameLogs      PlayerGameLog[] // Maç Maç Geçmiş Performans
+  watchedBy     PlayerWatchlist[] // Kimler takipte?
+  comments      Comment[]       // Sporcu yorumları
+  
+  updatedAt     DateTime @updatedAt
+}
+
+// Oyuncu Maç Geçmişi (Grafikler için)
+model PlayerGameLog {
+  id           String   @id @default(uuid())
+  playerId     String
+  gameDate     DateTime
+  opponent     String   // "vs BOS"
+  stats        Json     // { points: 30, rebounds: 10 }
+  
+  player       Player   @relation(fields: [playerId], references: [id])
+}
+
+// Oyuncu Alarm Sistemi
+model PlayerWatchlist {
+  id              String   @id @default(uuid())
+  userId          String
+  playerId        String
+  
+  // Alarm Ayarları
+  notifyOnDrop    Boolean  @default(true)  // Biri takımdan atarsa haber ver
+  notifyOnInjury  Boolean  @default(false) // Sakatlanırsa haber ver
+  notifyOnNews    Boolean  @default(false) // Haber çıkarsa haber ver
+  
+  user            User     @relation(fields: [userId], references: [id])
+  player          Player   @relation(fields: [playerId], references: [id])
+  
+  createdAt       DateTime @default(now())
+  @@unique([userId, playerId])
+}
+
+// Kaydedilen Analiz Raporları
+model SavedAnalysis {
+  id          String   @id @default(uuid())
+  userId      String
+  title       String   // "LeBron vs Durant"
+  type        String   // "PLAYER_COMPARE", "TEAM_COMPARE"
+  
+  entityAId   String
+  entityBId   String
+  
+  resultData  Json     // Raporun sonucu (Cache)
+  
+  user        User     @relation(fields: [userId], references: [id])
+  createdAt   DateTime @default(now())
+}
+
+// ==========================================
+// 4. TAKAS VE PAZAR YERİ (TRADE CENTER)
+// ==========================================
+model Trade {
+  id             String      @id @default(uuid())
+  initiatorId    String
+  targetUserId   String?     // Boşsa = MARKETPLACE (Herkese Açık)
+  clanId         String?     // Doluysa = KLAN İÇİ
+  
+  scope          TradeScope  @default(DIRECT)
+  
+  // Takas Varlıkları (JSON)
+  // [{ playerId: "...", type: "PLAYER" }, { amount: 500, type: "CREDIT" }]
+  offeredAssets  Json        
+  requestedAssets Json
+  
+  status         TradeStatus @default(OPEN)
+  
+  initiator      User        @relation("TradeInitiator", fields: [initiatorId], references: [id])
+  targetUser     User?       @relation("TradeTarget", fields: [targetUserId], references: [id])
+  clan           Clan?       @relation(fields: [clanId], references: [id])
+  
+  messages       Message[]   // Pazarlık Odası Sohbeti
+  createdAt      DateTime    @default(now())
+}
+
+enum TradeScope {
+  DIRECT
+  MARKETPLACE
+  CLAN
+}
+
+enum TradeStatus {
+  OPEN
+  NEGOTIATING
+  ACCEPTED
+  REJECTED
+  CANCELLED
+  EXPIRED
+}
+
+// ==========================================
+// 5. BAHİS SİSTEMİ (BETTING ENGINE)
+// ==========================================
+model Bet {
+  id           String    @id @default(uuid())
+  userId       String    // Bahsi başlatan
+  matchupId    String?   // Hangi maça?
+  
+  type         BetType
+  selection    String    // "TeamA" veya "Over 200.5"
+  odds         Float     // Oran (1.85)
+  amount       Int       // Yatırılan miktar
+  
+  opponentId   String?   // P2P ise rakip kim?
+  
+  status       BetStatus @default(PENDING)
+  winnerId     String?   // Kazanan User ID
+  
+  user         User      @relation(fields: [userId], references: [id])
+  opponent     User?     @relation("BetOpponent", fields: [opponentId], references: [id])
+  matchup      Matchup?  @relation(fields: [matchupId], references: [id])
+  
+  createdAt    DateTime  @default(now())
+}
+
+enum BetType {
+  MATCH_WINNER
+  PROP_BET
+  TOURNAMENT
+  P2P_CHALLENGE
+}
+
+enum BetStatus {
+  PENDING
+  ACTIVE
+  WON
+  LOST
+  CANCELLED
+}
+
+// ==========================================
+// 6. SOHBET VE YORUM (SOCIAL LAYER)
+// ==========================================
+model Message {
+  id           String   @id @default(uuid())
+  content      String   @db.Text
+  senderId     String
+  
+  // Hedef (Context)
+  leagueId     String?
+  clanId       String?
+  tradeId      String?
+  receiverId   String?  // DM
+  
+  sender       User     @relation(fields: [senderId], references: [id])
+  league       League?  @relation(fields: [leagueId], references: [id])
+  clan         Clan?    @relation(fields: [clanId], references: [id])
+  trade        Trade?   @relation(fields: [tradeId], references: [id])
+  
+  createdAt    DateTime @default(now())
+}
+
+model Comment {
+  id            String   @id @default(uuid())
+  content       String   @db.Text
+  authorId      String
+  
+  // Hedef (Ya Oyuncu ya Kullanıcı)
+  playerId      String?
+  targetUserId  String?
+  likes         Int      @default(0)
+  
+  author        User     @relation("CommentAuthor", fields: [authorId], references: [id])
+  player        Player?  @relation(fields: [playerId], references: [id])
+  targetUser    User?    @relation("ProfileOwner", fields: [targetUserId], references: [id])
+  
+  createdAt     DateTime @default(now())
+}
+
+// ==========================================
+// 7. KLAN, LEDGER VE DİĞERLERİ
+// ==========================================
+model Clan {
+  id          String       @id @default(uuid())
+  name        String       @unique
+  description String?
+  logoUrl     String?
+  treasury    Int          @default(0) // Klan Kasası
+  level       Int          @default(1)
+  
+  ownerId     String
+  owner       User         @relation("ClanOwner", fields: [ownerId], references: [id])
+  
+  members     ClanMember[]
+  messages    Message[]
+  trades      Trade[]
+}
+
+model ClanMember {
+  id        String   @id @default(uuid())
+  userId    String
+  clanId    String
+  role      ClanRole @default(MEMBER)
+  user      User     @relation(fields: [userId], references: [id])
+  clan      Clan     @relation(fields: [clanId], references: [id])
+  @@unique([userId, clanId])
+}
+
+enum ClanRole {
+  LEADER
+  OFFICER
+  MEMBER
+}
+
+model Ledger {
+  id           String   @id @default(uuid())
+  userId       String
+  amount       Int      // +500 veya -200
+  type         String   // "BET_WIN", "TRADE_FEE", "DEPOSIT"
+  description  String?  // "Lakers maçı bahsinden kazanç"
+  referenceId  String?  // BetID veya TradeID
+  
+  user         User     @relation(fields: [userId], references: [id])
+  createdAt    DateTime @default(now())
+}
+
+model Friendship {
+  id         String @id @default(uuid())
+  senderId   String
+  receiverId String
+  status     String @default("PENDING") // PENDING, ACCEPTED, BLOCKED
+  
+  sender     User   @relation("Sender", fields: [senderId], references: [id])
+  receiver   User   @relation("Receiver", fields: [receiverId], references: [id])
+  @@unique([senderId, receiverId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  content   String
+  type      String   // SYSTEM, TRADE, BET, PLAYER_ALERT
+  isRead    Boolean  @default(false)
+  
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+}
