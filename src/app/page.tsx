@@ -6,122 +6,134 @@ import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import YahooButton from "@/components/YahooButton";
+import ServerStatus from "@/components/ServerStatus";
+import StatPanel from "@/components/StatPanel";
+import PlayerPanel from "@/components/PlayerPanel";
+import LoginCard from "@/components/LoginCard";
+import ConnectYahooButton from "@/components/ConnectYahooButton";
+import NewsFeed from "@/components/NewsFeed";
+import LeagueCard from "@/components/LeagueCard";
 
 export default async function Home() {
   const session = await getServerSession(authOptions);
   let leagues: any[] = [];
   let error = null;
+  let isYahooConnected = false;
+  let userTeams: any[] = [];
 
   if (session?.user) {
-    // --- ONBOARDING KONTROLÜ ---
+    // --- ONBOARDING CHECK ---
     const userId = (session.user as any).id;
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        accounts: true,
+        teams: {
+          include: {
+            league: {
+              include: {
+                game: true
+              }
+            }
+          }
+        }
+      }
+    });
 
     if (!user?.username || !user?.birthDate) {
       redirect("/onboarding");
     }
-    // ---------------------------
 
-    try {
-      leagues = await getUserLeagues();
-    } catch (e) {
-      console.error("Failed to fetch leagues", e);
-      // Sessizce başarısız ol, kullanıcıya lig yokmuş gibi göster veya hata mesajı ver
-      // error = "Lig verileri alınırken bir hata oluştu.";
+    isYahooConnected = user.accounts.some(acc => acc.provider === "yahoo");
+    userTeams = user.teams;
+
+    if (isYahooConnected) {
+      try {
+        leagues = await getUserLeagues();
+      } catch (e) {
+        console.error("Failed to fetch leagues", e);
+      }
     }
+    // ---------------------------
   }
 
   return (
-    <main className="min-h-screen bg-[#030014] text-slate-200 overflow-hidden relative selection:bg-neon-cyan selection:text-black">
-      {/* BACKGROUND ASSETS */}
-      <div className="fixed inset-0 z-0 pointer-events-none">
-        <div className="absolute inset-0 bg-[url('/theme.png')] bg-cover bg-center opacity-20 mix-blend-screen"></div>
-        <div className="absolute inset-0 bg-gradient-to-b from-[#030014]/50 via-[#030014]/80 to-[#030014]"></div>
-        <div className="absolute top-0 left-0 w-full h-full bg-[linear-gradient(rgba(18,18,18,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] z-10 bg-[length:100%_2px,3px_100%] pointer-events-none"></div>
-      </div>
-
+    <main className="min-h-screen text-slate-200 overflow-hidden relative selection:bg-neon-cyan selection:text-black">
       <div className="relative z-20">
         <Navbar />
+        <ServerStatus />
 
-        {/* HERO BÖLÜMÜ (Giriş Yapılmamışsa veya Lig Yoksa) */}
-        {leagues.length === 0 && !error ? (
-          <div className="flex flex-col items-center justify-center min-h-[85vh] text-center px-4 py-12 relative">
-            {/* GLOW EFFECT */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-neon-purple/20 rounded-full blur-[100px] -z-10 animate-pulse"></div>
+        {/* HERO SECTION (If not logged in) */}
+        {!session ? (
+          <div className="relative w-full max-w-[90rem] mx-auto min-h-[85vh] flex items-center justify-center overflow-hidden gap-8">
 
-            <h1 className="text-6xl md:text-9xl font-black mb-2 tracking-tighter text-white drop-shadow-[0_0_30px_rgba(188,19,254,0.6)]">
-              TRADE <span className="text-transparent bg-clip-text bg-gradient-to-r from-neon-cyan via-white to-neon-purple animate-gradient-x">FANTASY</span>
-            </h1>
+            {/* LEFT HUD (Stats Feed) */}
+            <div className="hidden xl:block transition-opacity duration-500">
+              <StatPanel />
+            </div>
 
-            <div className="h-1 w-32 bg-gradient-to-r from-neon-cyan to-neon-purple mb-8 rounded-full shadow-[0_0_10px_rgba(0,243,255,0.8)]"></div>
+            {/* CENTER PANEL */}
+            <div className="relative z-10 flex justify-center items-center">
+              <LoginCard />
+            </div>
 
-            <p className="text-xl md:text-2xl text-slate-300 max-w-3xl mb-12 font-light tracking-wide leading-relaxed">
-              <span className="text-neon-cyan font-bold drop-shadow-[0_0_5px_rgba(0,243,255,0.8)]">YAHOO FANTASY</span> LİGLERİNİZİ YÖNETİN.<br />
-              ARKADAŞLARINIZLA <span className="text-neon-purple font-bold">TAKAS YAPIN</span>, BAHİSLERE GİRİN VE <span className="text-neon-pink font-bold">HÜKMET.</span>
-            </p>
+            {/* RIGHT HUD (Top Plans) */}
+            <div className="hidden xl:block transition-opacity duration-500">
+              <PlayerPanel />
+            </div>
 
-            {!session && (
-              <div className="group relative">
-                <div className="absolute -inset-1 bg-gradient-to-r from-neon-cyan to-neon-purple rounded-lg blur opacity-25 group-hover:opacity-75 transition duration-1000 group-hover:duration-200"></div>
-                <div className="relative p-8 bg-[#0a0a12] rounded-lg border border-white/10 leading-none flex items-center">
-                  <span className="text-slate-400 mr-4">BAŞLAMAK İÇİN</span>
-                  <Link href="/login" className="text-neon-cyan font-bold hover:text-white transition-colors uppercase tracking-widest border-b border-neon-cyan hover:border-white pb-1">
-                    GİRİŞ YAPIN ↗
-                  </Link>
-                </div>
-              </div>
-            )}
           </div>
         ) : (
-          // --- LİGLER LİSTESİ ---
+          // --- LOGGED IN HOME BASE ---
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-            <h2 className="text-3xl font-bold mb-8 text-white border-l-4 border-neon-cyan pl-4 uppercase tracking-widest">
-              Aktif Ligleriniz
-            </h2>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {leagues.map((league) => (
-                <div key={league.key} className="group relative bg-[#0a0a12] border border-white/10 rounded-xl overflow-hidden hover:border-neon-cyan/50 transition-all duration-300 hover:shadow-[0_0_20px_rgba(0,243,255,0.15)]">
-                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-neon-cyan to-neon-purple transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left"></div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-                  <div className="p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="px-3 py-1 bg-white/5 rounded text-xs font-mono text-neon-cyan border border-neon-cyan/20">
-                        {league.season}
-                      </span>
-                      <span className="text-xs text-slate-500 font-mono uppercase tracking-wider">
-                        {league.gameCode}
-                      </span>
-                    </div>
+              {/* LEFT: LEAGUE ACCESS TERMINAL */}
+              <div className="lg:col-span-2">
+                <h2 className="text-2xl font-bold mb-6 text-white border-l-4 border-neon-cyan pl-4 uppercase tracking-widest flex items-center gap-3">
+                  League Access Terminal
+                  <span className="w-2 h-2 bg-neon-cyan rounded-full animate-pulse shadow-[0_0_10px_#00f3ff]" />
+                </h2>
 
-                    <h3 className="text-xl font-bold text-white mb-2 group-hover:text-neon-cyan transition-colors truncate">
-                      {league.name}
-                    </h3>
-
-                    <div className="flex items-center gap-3 mb-6">
-                      {league.logoUrl && (
-                        <Image
-                          src={league.logoUrl}
-                          alt={league.name}
-                          width={32}
-                          height={32}
-                          className="rounded-full border border-white/20"
-                        />
-                      )}
-                      <span className="text-sm text-slate-400">
-                        {league.numTeams} Takım
-                      </span>
-                    </div>
-
-                    <Link
-                      href={`/league/${league.key}`}
-                      className="block w-full py-3 text-center bg-white/5 hover:bg-neon-cyan/10 text-slate-300 hover:text-neon-cyan border border-white/10 hover:border-neon-cyan/50 rounded-lg transition-all font-bold uppercase text-sm tracking-wider"
-                    >
-                      Lige Git
+                {!isYahooConnected ? (
+                  <div className="text-center max-w-md mx-auto bg-[#0a0a12]/80 backdrop-blur-xl p-8 rounded-2xl border border-white/10 shadow-[0_0_40px_rgba(188,19,254,0.15)] mt-10">
+                    <h1 className="text-2xl font-bold text-white mb-4">Connect Yahoo Fantasy</h1>
+                    <p className="text-slate-400 mb-8 leading-relaxed text-sm">
+                      To access your leagues, live stats, and trade analysis, you need to link your Yahoo Fantasy account.
+                    </p>
+                    <ConnectYahooButton />
+                  </div>
+                ) : userTeams.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {userTeams.map((team) => (
+                      <LeagueCard
+                        key={team.id}
+                        leagueId={team.league.id}
+                        leagueName={team.league.name}
+                        teamName={team.name}
+                        logoUrl={team.logoUrl}
+                        gameCode={team.league.game.code}
+                        season={team.league.game.season}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-20 border border-dashed border-white/10 rounded-xl bg-white/5">
+                    <p className="text-slate-400 font-mono mb-4">NO ACTIVE LEAGUES DETECTED</p>
+                    <Link href="/dashboard" className="text-neon-cyan hover:underline text-sm uppercase tracking-wider">
+                      Go to Dashboard to Sync
                     </Link>
                   </div>
-                </div>
-              ))}
+                )}
+              </div>
+
+              {/* RIGHT: INTELLIGENCE FEED */}
+              <div className="lg:col-span-1">
+                <NewsFeed />
+              </div>
+
             </div>
           </div>
         )}
@@ -129,3 +141,4 @@ export default async function Home() {
     </main>
   );
 }
+

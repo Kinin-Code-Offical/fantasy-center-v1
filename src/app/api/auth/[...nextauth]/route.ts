@@ -1,4 +1,5 @@
 import NextAuth, { NextAuthOptions } from "next-auth";
+import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { OAuthConfig } from "next-auth/providers/oauth"; // <--- BU SATIRI EKLEDİK (TİP TANIMI)
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
@@ -29,6 +30,10 @@ const CustomYahooProvider = (options: { clientId: string; clientSecret: string }
             name: profile.name || profile.given_name,
             email: profile.email,
             image: profile.picture,
+            yahooId: profile.sub,
+            username: null,
+            credits: 1000,
+            reputation: 50,
         };
     },
     clientId: options.clientId,
@@ -36,6 +41,10 @@ const CustomYahooProvider = (options: { clientId: string; clientSecret: string }
 });
 
 export const authOptions: NextAuthOptions = {
+    adapter: PrismaAdapter(prisma),
+    session: {
+        strategy: "jwt",
+    },
     providers: [
         CustomYahooProvider({
             clientId: process.env.YAHOO_CLIENT_ID!,
@@ -71,159 +80,168 @@ export const authOptions: NextAuthOptions = {
                     email: user.email,
                     name: `${user.firstName} ${user.lastName}`,
                     image: user.avatarUrl,
+                    credits: user.credits,
+                    reputation: user.reputation,
+                    yahooId: user.yahooId,
+                    username: user.username,
                 };
             }
         })
     ],
     callbacks: {
         async signIn({ user, account, profile }) {
-            console.log("SignIn Callback Started");
-            console.log("User:", user);
-            console.log("Account:", account);
+            // Adapter otomatik olarak Account oluşturur ve User ile bağlar.
+            // Ekstra bir işlem yapmamıza gerek yok, ancak loglayabiliriz.
+            console.log("SignIn Callback:", user.email, account?.provider);
 
-            if (!account || !user) {
-                console.error("Missing account or user data");
-                return false;
-            }
+            // --- HESAP BAĞLAMA (ACCOUNT LINKING) ---
+            // Eğer kullanıcı zaten varsa ve farklı bir provider ile giriş yapıyorsa,
+            // NextAuth varsayılan olarak "OAuthAccountNotLinked" hatası verir.
+            // Bunu aşmak için manuel olarak hesabı bağlamamız gerekebilir veya
+            // allowDangerousEmailAccountLinking: true ayarını kullanabiliriz (Provider ayarlarında).
+            // Ancak burada manuel kontrol daha güvenlidir.
 
-            // Credentials provider ile giriş yapılıyorsa, authorize fonksiyonu zaten doğrulama yaptı.
-            // Veritabanı güncellemesine gerek yok.
-            if (account.provider === "credentials") {
-                return true;
-            }
-
-            try {
-                console.log("Attempting DB Upsert...");
-
-                // İsim ayrıştırma (Best Effort)
-                const fullName = user.name || "";
-                const nameParts = fullName.split(" ");
-                const firstName = nameParts[0] || "";
-                const lastName = nameParts.slice(1).join(" ") || "";
-
-                // 1. Önce Yahoo ID ile kullanıcı var mı diye bak
-                let dbUser = await prisma.user.findUnique({
-                    where: { yahooId: user.id }
+            if (account?.provider === "yahoo" && user.email) {
+                const existingUser = await prisma.user.findUnique({
+                    where: { email: user.email }
                 });
 
-                // 2. Yoksa, Email ile var mı diye bak (Hesap Bağlama Senaryosu)
-                if (!dbUser && user.email) {
-                    dbUser = await prisma.user.findUnique({
-                        where: { email: user.email }
+                if (existingUser) {
+                    // Kullanıcı var, ancak bu provider ile bağlı mı?
+                    const linkedAccount = await prisma.account.findFirst({
+                        where: {
+                            userId: existingUser.id,
+                            provider: "yahoo"
+                        }
                     });
+
+                    if (!linkedAccount) {
+                        // Bağlı değilse, manuel olarak bağla
+                        await prisma.account.create({
+                            data: {
+                                userId: existingUser.id,
+                                type: account.type,
+                                provider: account.provider,
+                                providerAccountId: account.providerAccountId,
+                                access_token: account.access_token,
+                                refresh_token: account.refresh_token,
+                                expires_at: account.expires_at,
+                                token_type: account.token_type,
+                                scope: account.scope,
+                                id_token: account.id_token,
+                                session_state: account.session_state
+                            }
+                        });
+                        return true; // Başarılı, devam et
+                    }
                 }
-
-                if (dbUser) {
-                    // --- GÜNCELLEME (UPDATE) ---
-                    console.log("User found, updating tokens...");
-                    await prisma.user.update({
-                        where: { id: dbUser.id },
-                        data: {
-                            yahooId: user.id, // Eğer email ile bulduysak Yahoo ID'yi ekle (Bağla)
-                            accessToken: account.access_token,
-                            refreshToken: account.refresh_token,
-                            tokenExpires: account.expires_at ? BigInt(account.expires_at) : null,
-                            // İsim ve avatarı güncelle (Yahoo verisi öncelikli)
-                            firstName: firstName || dbUser.firstName,
-                            lastName: lastName || dbUser.lastName,
-                            avatarUrl: user.image || dbUser.avatarUrl,
-                            emailVerified: dbUser.emailVerified || new Date(), // Yahoo güvenilirdir
-                        },
-                    });
-                } else {
-                    // --- YENİ KAYIT (CREATE) ---
-                    console.log("User not found, creating new...");
-
-                    // Yahoo bazen email döndürmez, bu durumda unique bir placeholder oluşturuyoruz.
-                    const emailToUse = user.email || `yahoo_${user.id}@no-email.com`;
-
-                    await prisma.user.create({
-                        data: {
-                            yahooId: user.id,
-                            email: emailToUse,
-                            firstName: firstName,
-                            lastName: lastName,
-                            avatarUrl: user.image,
-                            accessToken: account.access_token,
-                            refreshToken: account.refresh_token,
-                            tokenExpires: account.expires_at ? BigInt(account.expires_at) : null,
-                            emailVerified: new Date(), // Yahoo ile gelen email doğrulanmıştır
-                        },
-                    });
-                }
-
-                console.log("DB Operation Successful");
-                return true;
-            } catch (error) {
-                console.error("DB Login Error Detailed:", error);
-                return false;
             }
+
+            return true;
         },
         async jwt({ token, user, account, trigger, session }) {
             // 1. İlk Giriş Anı (Sign In)
-            if (user && account) {
-                let dbUser;
-
-                if (account.provider === "credentials") {
-                    // Credentials provider zaten DB ID'sini user.id olarak döndürüyor
-                    dbUser = await prisma.user.findUnique({
-                        where: { id: user.id }
-                    });
-                } else {
-                    // Yahoo (veya diğer OAuth) provider ID'sini user.id olarak döndürüyor
-                    // Önce Yahoo ID ile kullanıcı var mı diye bak
-                    dbUser = await prisma.user.findUnique({
-                        where: { yahooId: user.id }
-                    });
-
-                    // Yoksa, Email ile var mı diye bak (Hesap Bağlama)
-                    if (!dbUser && user.email) {
-                        dbUser = await prisma.user.findUnique({
-                            where: { email: user.email }
-                        });
-                    }
-                }
-
-                if (dbUser) {
-                    token.id = dbUser.id;
-                    token.yahooId = dbUser.yahooId;
-                    token.username = dbUser.username;
-                    token.role = "USER"; // İleride admin rolü eklenebilir
-                }
+            if (user) {
+                token.id = user.id;
+                // ÖNEMLİ: Base64 resim verisi cookie'yi patlatıyor (431 Hatası).
+                // Bu yüzden token'dan resim verilerini siliyoruz.
+                delete token.picture;
+                delete token.image;
             }
 
-            // 2. Sonraki İstekler (Token zaten var)
+            // 2. Session Update (Client tarafında update() çağrıldığında)
+            if (trigger === "update" && session) {
+                // Sadece isim gibi küçük verileri güncelleyebiliriz
+                // Resim verisini ASLA token'a almıyoruz
+            }
+
+            // 3. Sonraki İstekler (Token zaten var)
             // Veritabanından güncel bilgileri çekip token'ı tazeleyelim
             if (token.id) {
                 const dbUser = await prisma.user.findUnique({
                     where: { id: token.id as string },
-                    select: { username: true, credits: true, reputation: true, avatarUrl: true }
+                    select: {
+                        username: true,
+                        credits: true,
+                        reputation: true,
+                        yahooId: true
+                    }
                 });
 
                 if (dbUser) {
                     token.username = dbUser.username;
                     token.credits = dbUser.credits;
                     token.reputation = dbUser.reputation;
-                    token.avatarUrl = dbUser.avatarUrl;
+                    token.yahooId = dbUser.yahooId;
                 }
             }
 
             return token;
         },
         async session({ session, token }) {
-            if (session.user) {
+            if (session.user && token.id) {
                 (session.user as any).id = token.id;
                 (session.user as any).yahooId = token.yahooId;
                 (session.user as any).username = token.username;
                 (session.user as any).credits = token.credits;
                 (session.user as any).reputation = token.reputation;
-                (session.user as any).avatarUrl = token.avatarUrl;
+
+                // Avatar URL'i token yerine doğrudan DB'den çekiyoruz (Cookie şişmesini önlemek için)
+                const dbUser = await prisma.user.findUnique({
+                    where: { id: token.id as string },
+                    select: { avatarUrl: true }
+                });
+
+                if (!dbUser) {
+                    // Kullanıcı veritabanından silinmişse oturumu sonlandır
+                    return null as any;
+                }
+
+                if (dbUser) {
+                    (session.user as any).avatarUrl = dbUser.avatarUrl;
+                }
             }
             return session;
         },
     },
     secret: process.env.NEXTAUTH_SECRET,
     debug: true,
+    events: {
+        async signIn({ user, account, profile, isNewUser }) {
+            if (account?.provider === "yahoo") {
+                try {
+                    const fullName = user.name || "";
+                    const nameParts = fullName.split(" ");
+                    const firstName = nameParts[0] || "";
+                    const lastName = nameParts.slice(1).join(" ") || "";
+
+                    // Mevcut kullanıcı verilerini kontrol et
+                    const currentUser = await prisma.user.findUnique({
+                        where: { id: user.id },
+                        select: { avatarUrl: true, firstName: true, lastName: true }
+                    });
+
+                    await prisma.user.update({
+                        where: { id: user.id },
+                        data: {
+                            firstName: currentUser?.firstName || firstName, // Mevcut varsa koru
+                            lastName: currentUser?.lastName || lastName,
+                            yahooId: account.providerAccountId,
+                            // Sadece avatarUrl boşsa Yahoo resmini kullan, aksi takdirde mevcut olanı koru
+                            avatarUrl: currentUser?.avatarUrl || user.image,
+                            emailVerified: new Date() // Yahoo ile giriş güvenlidir
+                        }
+                    });
+                } catch (e) {
+                    console.error("Error updating user details in signIn event", e);
+                }
+            }
+        }
+    },
+    pages: {
+        signIn: '/login',
+        error: '/auth/error',
+    }
 };
 
 const handler = NextAuth(authOptions);

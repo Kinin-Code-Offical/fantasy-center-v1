@@ -33,20 +33,14 @@ export default async function OnboardingPage() {
     }
 
     return (
-        <main className="min-h-screen bg-[#030014] text-slate-200 flex items-center justify-center relative overflow-hidden">
-            {/* BACKGROUND ASSETS */}
-            <div className="fixed inset-0 z-0 pointer-events-none">
-                <div className="absolute inset-0 bg-[url('/theme.png')] bg-cover bg-center opacity-10 mix-blend-screen"></div>
-                <div className="absolute inset-0 bg-gradient-to-b from-[#030014]/50 via-[#030014]/80 to-[#030014]"></div>
-            </div>
-
+        <main className="min-h-screen text-slate-200 flex items-center justify-center relative overflow-hidden">
             <div className="relative z-10 w-full max-w-md p-8 bg-[#0a0a12]/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_0_50px_rgba(0,243,255,0.1)]">
                 <div className="text-center mb-8">
                     <h1 className="text-3xl font-black tracking-tighter text-white mb-2">
-                        HOŞGELDİN <span className="text-neon-cyan">{user?.firstName || "OYUNCU"}</span>
+                        WELCOME <span className="text-neon-cyan">{user?.firstName || "PLAYER"}</span>
                     </h1>
                     <p className="text-slate-400 text-sm">
-                        Trade Center Fantasy dünyasına girmeden önce kimliğini doğrulamamız gerekiyor.
+                        We need to verify your identity before entering the Trade Center Fantasy world.
                     </p>
                 </div>
 

@@ -1,15 +1,19 @@
 @import "tailwindcss";
 
 :root {
-  /* Cyber Edge Palette */
-  --cyber-bg: #030014;
-  /* Deep Space Black/Purple */
-  --cyber-dark: #0a0a12;
-  --cyber-panel: #12122a;
+  /* Cyber Edge Palette - Green Edition */
+  --cyber-bg: #050a05;
+  --cyber-dark: #0a120a;
+  --cyber-panel: #0f1a0f;
 
-  --neon-cyan: #00f3ff;
-  --neon-purple: #bc13fe;
-  --neon-pink: #ff0055;
+  --neon-green: #00ff41;
+  --neon-emerald: #008f11;
+  --neon-lime: #ccff00;
+
+  /* Legacy mappings for compatibility */
+  --neon-cyan: #00ff41;
+  --neon-purple: #008f11;
+  --neon-pink: #ccff00;
   --neon-yellow: #fcee0a;
 
   --background: var(--cyber-bg);
@@ -22,9 +26,15 @@
   --color-cyber-bg: var(--cyber-bg);
   --color-cyber-dark: var(--cyber-dark);
   --color-cyber-panel: var(--cyber-panel);
-  --color-neon-cyan: var(--neon-cyan);
-  --color-neon-purple: var(--neon-purple);
-  --color-neon-pink: var(--neon-pink);
+
+  --color-neon-green: var(--neon-green);
+  --color-neon-emerald: var(--neon-emerald);
+  --color-neon-lime: var(--neon-lime);
+
+  /* Legacy mappings */
+  --color-neon-cyan: var(--neon-green);
+  --color-neon-purple: var(--neon-emerald);
+  --color-neon-pink: var(--neon-lime);
   --color-neon-yellow: var(--neon-yellow);
 
   --font-sans: var(--font-geist-sans);
@@ -76,3 +86,47 @@ body {
 .cyber-button:hover::before {
   left: 100%;
 }
+
+.clip-path-polygon {
+  clip-path: polygon(10% 0, 100% 0, 90% 100%, 0% 100%);
+}
+
+.animate-spin-slow {
+  animation: spin 10s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Hologram Effect */
+.bg-hologram {
+  background:
+    linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+    linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+  background-size: 100% 2px, 3px 100%;
+  background-color: rgba(10, 20, 10, 0.6);
+  backdrop-filter: blur(4px);
+  box-shadow: inset 0 0 20px rgba(0, 255, 65, 0.05);
+}
+
+.bg-hologram:hover {
+  background-color: rgba(10, 20, 10, 0.7);
+  box-shadow: inset 0 0 30px rgba(0, 255, 65, 0.1);
+}
+@keyframes scan-vertical {
+  0% { top: -10%; opacity: 0; }
+  50% { opacity: 1; }
+  100% { top: 110%; opacity: 0; }
+}
+
+.animate-scan-vertical {
+  animation: scan-vertical 3s linear infinite;
+}
+

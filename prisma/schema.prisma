@@ -12,35 +12,72 @@ datasource db {
 // ==========================================
 // 1. KULLANICI VE KİMLİK (USER & IDENTITY)
 // ==========================================
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?  @db.Text
+  access_token       String?  @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?  @db.Text
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
 model User {
   id            String    @id @default(uuid())
-  yahooId       String?   @unique // Yahoo ile giriş yapmayanlar için opsiyonel
-  email         String    @unique // E-posta artık zorunlu ve benzersiz
-  emailVerified DateTime? // E-posta doğrulama tarihi
-  password      String?   // Şifre (Hashlenmiş)
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?   // Şifre (Hashlenmiş) - Credentials için
+
+  // Custom Fields
+  yahooId       String?   @unique // Legacy / Quick Access
   firstName     String?   // Gerçek Ad
   lastName      String?   // Gerçek Soyad
   birthDate     DateTime? // Doğum Tarihi
   username      String?
-  avatarUrl     String?
+  avatarUrl     String?   // image ile senkronize tutulabilir veya ayrı
   bio           String?   // Profil yazısı
 
   // Ekonomi & İtibar
   credits       Int       @default(1000) // Sanal Para
   reputation    Int       @default(50)   // Güven Puanı (0-100)
 
-  // Güvenlik (OAuth Tokenları - Offline işlem için şart)
-  accessToken   String?   @db.Text
-  refreshToken  String?   @db.Text
-  tokenExpires  BigInt?
-
   // İlişkiler
+  accounts      Account[]
+  sessions      Session[]
+  
   teams         Team[]
   ledgers       Ledger[]      // Cüzdan Geçmişi
   notifications Notification[]
   
   // [YENİ] Alarm ve Analiz
-  watchlist     PlayerWatchlist[] // Oyuncu Alarmları
+  follows       PlayerFollow[] // Oyuncu Takipleri
   savedAnalyses SavedAnalysis[]   // Kaydedilen Raporlar
 
   // Sosyal
@@ -55,12 +92,15 @@ model User {
 
   // İletişim
   messages         Message[]    // Gönderilen mesajlar
-  authoredComments Comment[]    @relation("CommentAuthor") // Yazdığı yorumlar
-  profileComments  Comment[]    @relation("ProfileOwner")  // Profiline gelen yorumlar
+  comments         Comment[]    // Yazdığı yorumlar
 
-  // Klan
+    // Klan
   clanMembers      ClanMember[]
   ownedClans       Clan[]       @relation("ClanOwner")
+
+  // Market
+  listings         TradeListing[] @relation("Listings")
+  offersMade       TradeOffer[]   @relation("OffersMade")
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -80,12 +120,13 @@ model Game {
 }
 
 model League {
-  id           String   @id // Yahoo League Key (örn: "418.l.12345")
-  gameId       String
-  name         String
-  numTeams     Int
-  currentWeek  Int      @default(1)
-  scoringType  String   // "head", "roto", "point"
+  id             String   @id @default(cuid())
+  yahooLeagueKey String   @unique
+  gameId         String
+  name           String
+  numTeams       Int
+  currentWeek    Int      @default(1)
+  scoringType    String   // "head", "roto", "point"
   
   // Lig Ayarları (Hangi istatistikler kullanılıyor? JSON)
   settings     Json?    
@@ -99,11 +140,12 @@ model League {
 }
 
 model Team {
-  id           String   @id // Yahoo Team Key
-  leagueId     String
-  managerId    String
-  name         String
-  logoUrl      String?
+  id             String   @id @default(cuid())
+  yahooTeamKey   String   @unique
+  leagueId       String
+  managerId      String
+  name           String
+  logoUrl        String?
   
   // Puan Durumu
   wins         Int      @default(0)
@@ -115,8 +157,10 @@ model Team {
   // [{ playerId: "nba.p.123", position: "PG", status: "ACT" }]
   roster       Json?    
   
+  players      Player[] // Many-to-Many relation for roster
+
   league       League   @relation(fields: [leagueId], references: [id])
-  manager      User     @relation(fields: [managerId], references: [id])
+  manager      User     @relation(fields: [managerId], references: [id], onDelete: Cascade)
   
   // Eşleşmeler (Ev Sahibi / Deplasman)
   homeMatchups Matchup[] @relation("HomeTeam")
@@ -157,6 +201,18 @@ model Player {
   photoUrl      String?
   
   primaryPos    String?  // "PG"
+  
+  // Stats
+  fantasyPoints   Float    @default(0)
+  projectedPoints Float    @default(0)
+  percentStarted  Float?
+  percentOwned    Float    @default(0)
+  marketValue     Float    @default(0)
+  opponent        String?
+  
+  // status field already exists above, but instructions asked to add it. 
+  // It is already there: status String? // "Healthy", "IR", "GTD"
+  // I will keep the existing one and just add the points.
   eligiblePos   Json?    // ["PG", "SG", "SF"]
   
   // Sezon Ortalamaları
@@ -164,11 +220,33 @@ model Player {
   
   // İlişkiler
   game          Game            @relation(fields: [gameId], references: [id])
+  teams         Team[]          // Many-to-Many relation for roster
   gameLogs      PlayerGameLog[] // Maç Maç Geçmiş Performans
-  watchedBy     PlayerWatchlist[] // Kimler takipte?
+  followers     PlayerFollow[]  // Kimler takipte?
+  news          PlayerNews[]
   comments      Comment[]       // Sporcu yorumları
   
+  // Market
+  listings      TradeListing[]
+  offeredIn     TradeOffer[]
+
   updatedAt     DateTime @updatedAt
+}
+
+model PlayerNews {
+  id          String   @id @default(cuid())
+  headline    String
+  content     String?
+  url         String?
+  source      String?
+  publishedAt DateTime
+  createdAt   DateTime @default(now())
+  
+  playerId    String
+  player      Player   @relation(fields: [playerId], references: [id])
+
+  @@unique([playerId, headline])
+  @@index([publishedAt])
 }
 
 // Oyuncu Maç Geçmişi (Grafikler için)
@@ -182,18 +260,13 @@ model PlayerGameLog {
   player       Player   @relation(fields: [playerId], references: [id])
 }
 
-// Oyuncu Alarm Sistemi
-model PlayerWatchlist {
-  id              String   @id @default(uuid())
+// Oyuncu Takip Sistemi
+model PlayerFollow {
+  id              String   @id @default(cuid())
   userId          String
   playerId        String
   
-  // Alarm Ayarları
-  notifyOnDrop    Boolean  @default(true)  // Biri takımdan atarsa haber ver
-  notifyOnInjury  Boolean  @default(false) // Sakatlanırsa haber ver
-  notifyOnNews    Boolean  @default(false) // Haber çıkarsa haber ver
-  
-  user            User     @relation(fields: [userId], references: [id])
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   player          Player   @relation(fields: [playerId], references: [id])
   
   createdAt       DateTime @default(now())
@@ -212,7 +285,7 @@ model SavedAnalysis {
   
   resultData  Json     // Raporun sonucu (Cache)
   
-  user        User     @relation(fields: [userId], references: [id])
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())
 }
 
@@ -234,8 +307,8 @@ model Trade {
   
   status         TradeStatus @default(OPEN)
   
-  initiator      User        @relation("TradeInitiator", fields: [initiatorId], references: [id])
-  targetUser     User?       @relation("TradeTarget", fields: [targetUserId], references: [id])
+  initiator      User        @relation("TradeInitiator", fields: [initiatorId], references: [id], onDelete: Cascade)
+  targetUser     User?       @relation("TradeTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
   clan           Clan?       @relation(fields: [clanId], references: [id])
   
   messages       Message[]   // Pazarlık Odası Sohbeti
@@ -275,8 +348,8 @@ model Bet {
   status       BetStatus @default(PENDING)
   winnerId     String?   // Kazanan User ID
   
-  user         User      @relation(fields: [userId], references: [id])
-  opponent     User?     @relation("BetOpponent", fields: [opponentId], references: [id])
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  opponent     User?     @relation("BetOpponent", fields: [opponentId], references: [id], onDelete: SetNull)
   matchup      Matchup?  @relation(fields: [matchupId], references: [id])
   
   createdAt    DateTime  @default(now())
@@ -311,27 +384,22 @@ model Message {
   tradeId      String?
   receiverId   String?  // DM
   
-  sender       User     @relation(fields: [senderId], references: [id])
+  sender       User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
   league       League?  @relation(fields: [leagueId], references: [id])
   clan         Clan?    @relation(fields: [clanId], references: [id])
-  trade        Trade?   @relation(fields: [tradeId], references: [id])
+  trade        Trade?   @relation(fields: [tradeId], references: [id], onDelete: Cascade)
   
   createdAt    DateTime @default(now())
 }
 
 model Comment {
-  id            String   @id @default(uuid())
+  id            String   @id @default(cuid())
   content       String   @db.Text
-  authorId      String
+  userId        String
+  playerId      String
   
-  // Hedef (Ya Oyuncu ya Kullanıcı)
-  playerId      String?
-  targetUserId  String?
-  likes         Int      @default(0)
-  
-  author        User     @relation("CommentAuthor", fields: [authorId], references: [id])
-  player        Player?  @relation(fields: [playerId], references: [id])
-  targetUser    User?    @relation("ProfileOwner", fields: [targetUserId], references: [id])
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  player        Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
   
   createdAt     DateTime @default(now())
 }
@@ -348,7 +416,7 @@ model Clan {
   level       Int          @default(1)
   
   ownerId     String
-  owner       User         @relation("ClanOwner", fields: [ownerId], references: [id])
+  owner       User         @relation("ClanOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   
   members     ClanMember[]
   messages    Message[]
@@ -360,8 +428,8 @@ model ClanMember {
   userId    String
   clanId    String
   role      ClanRole @default(MEMBER)
-  user      User     @relation(fields: [userId], references: [id])
-  clan      Clan     @relation(fields: [clanId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clan      Clan     @relation(fields: [clanId], references: [id], onDelete: Cascade)
   @@unique([userId, clanId])
 }
 
@@ -379,7 +447,7 @@ model Ledger {
   description  String?  // "Lakers maçı bahsinden kazanç"
   referenceId  String?  // BetID veya TradeID
   
-  user         User     @relation(fields: [userId], references: [id])
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt    DateTime @default(now())
 }
 
@@ -389,18 +457,57 @@ model Friendship {
   receiverId String
   status     String @default("PENDING") // PENDING, ACCEPTED, BLOCKED
   
-  sender     User   @relation("Sender", fields: [senderId], references: [id])
-  receiver   User   @relation("Receiver", fields: [receiverId], references: [id])
+  sender     User   @relation("Sender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver   User   @relation("Receiver", fields: [receiverId], references: [id], onDelete: Cascade)
   @@unique([senderId, receiverId])
 }
 
 model Notification {
-  id        String   @id @default(uuid())
+  id        String   @id @default(cuid())
   userId    String
-  content   String
-  type      String   // SYSTEM, TRADE, BET, PLAYER_ALERT
+  type      String   // SYSTEM, TRADE, CLAN, INFO
+  title     String
+  message   String
+  link      String?
   isRead    Boolean  @default(false)
-  
-  user      User     @relation(fields: [userId], references: [id])
   createdAt DateTime @default(now())
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
+// ==========================================
+// 5. MARKET (P2P TRADING)
+// ==========================================
+
+model TradeListing {
+  id          String   @id @default(cuid())
+  status      String   @default("ACTIVE") // ACTIVE, COMPLETED, CANCELLED
+  notes       String?  // Seller's request: "Looking for a Center"
+  createdAt   DateTime @default(now())
+
+  // Who is selling what?
+  sellerId    String
+  seller      User     @relation("Listings", fields: [sellerId], references: [id])
+  playerId    String
+  player      Player   @relation(fields: [playerId], references: [id])
+
+  // Offers received on this listing
+  offers      TradeOffer[]
+}
+
+model TradeOffer {
+  id          String   @id @default(cuid())
+  status      String   @default("PENDING") // PENDING, ACCEPTED, REJECTED
+  createdAt   DateTime @default(now())
+
+  // Who is offering?
+  listingId   String
+  listing     TradeListing @relation(fields: [listingId], references: [id])
+  offererId   String
+  offerer     User         @relation("OffersMade", fields: [offererId], references: [id])
+
+  // The Offer Package (Multi-asset)
+  offeredPlayerId String? // The player being offered in exchange
+  offeredPlayer   Player? @relation(fields: [offeredPlayerId], references: [id])
+  offeredCredits  Float   @default(0) // Optional sweetener
+}
+

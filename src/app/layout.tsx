@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Providers from "@/components/Providers";
+import CyberBackground from "@/components/CyberBackground";
 
 export const metadata: Metadata = {
   title: "Fantasy Center",
@@ -15,12 +16,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       {/* Koyu tema için arka plan rengi veriyoruz */}
-      <body className="bg-[#030014] text-[#ededed] antialiased selection:bg-[#00f3ff] selection:text-black relative min-h-screen">
-        {/* Global Background */}
-        <div className="fixed inset-0 z-[-1] pointer-events-none">
-          <div className="absolute inset-0 bg-[url('/theme.png')] bg-cover bg-center opacity-10 mix-blend-screen"></div>
-          <div className="absolute inset-0 bg-gradient-to-b from-[#030014]/80 via-[#030014]/90 to-[#030014]"></div>
-        </div>
+      <body className="bg-[#050a05] text-[#ededed] antialiased selection:bg-[#00ff41] selection:text-black relative min-h-screen">
+        <CyberBackground />
         <Providers>
           {children}
         </Providers>
