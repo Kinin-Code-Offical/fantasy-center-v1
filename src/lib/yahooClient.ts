@@ -113,3 +113,63 @@ export async function getPlayerNews(accessToken: string, playerKeys: string[]) {
 
     return allPlayers;
 }
+
+export async function getLeagueTransactions(accessToken: string, leagueKey: string) {
+    // league/{leagueKey}/transactions;types=trade,add,drop
+    const data = await yahooFetch(`/league/${leagueKey}/transactions;types=trade,add,drop`, accessToken);
+    return data;
+}
+
+export async function postTradeToYahoo(accessToken: string, leagueKey: string, tradeData: {
+    trader_team_key: string;
+    tradee_team_key: string;
+    note?: string;
+    players: Array<{
+        player_key: string;
+        source_team_key: string;
+        destination_team_key: string;
+    }>;
+}) {
+    const url = `https://fantasysports.yahooapis.com/fantasy/v2/league/${leagueKey}/transactions`;
+    
+    // Construct XML
+    const xmlBody = `
+    <fantasy_content>
+      <transaction>
+        <type>trade</type>
+        <trader_team_key>${tradeData.trader_team_key}</trader_team_key>
+        <tradee_team_key>${tradeData.tradee_team_key}</tradee_team_key>
+        <note>${tradeData.note || ''}</note>
+        <players>
+          ${tradeData.players.map((p) => `
+          <player>
+            <player_key>${p.player_key}</player_key>
+            <transaction_data>
+              <type>trade</type>
+              <source_team_key>${p.source_team_key}</source_team_key>
+              <destination_team_key>${p.destination_team_key}</destination_team_key>
+            </transaction_data>
+          </player>
+          `).join('')}
+        </players>
+      </transaction>
+    </fantasy_content>
+    `.trim();
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/xml'
+        },
+        body: xmlBody
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Yahoo Trade Error: ${response.statusText} - ${errorText}`);
+    }
+
+    const responseText = await response.text();
+    return responseText;
+}

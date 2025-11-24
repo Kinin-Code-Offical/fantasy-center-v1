@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getValidYahooToken } from "@/lib/auth-helpers";
-import { getFullUserStats, getTeamRoster, getPlayerNews } from "@/lib/yahooClient";
+import { getFullUserStats, getTeamRoster, getPlayerNews, getLeagueTransactions } from "@/lib/yahooClient";
 import { fetchAndProcessNews } from "@/lib/rss";
 import { revalidatePath } from "next/cache";
 
@@ -123,7 +123,7 @@ export async function syncUserLeagues() {
                 if (!teams) continue;
 
                 // Upsert League
-                await prisma.league.upsert({
+                const league = await prisma.league.upsert({
                     where: { yahooLeagueKey: leagueMeta.league_key },
                     create: {
                         yahooLeagueKey: leagueMeta.league_key,
@@ -141,6 +141,9 @@ export async function syncUserLeagues() {
                         lastSync: new Date(),
                     }
                 });
+
+                // Sync Transactions
+                await syncLeagueTransactions(accessToken, leagueMeta.league_key, league.id);
 
                 // Iterate Teams
                 for (const teamKey in teams) {
@@ -250,9 +253,8 @@ async function syncTeamRosterInternal(teamKey: string, accessToken: string, team
                 const playerKey = getField(playerMeta, "player_key");
                 const name = getField(playerMeta, "name");
                 const editorialTeam = getField(playerMeta, "editorial_team_abbr");
-                const headshot = getField(playerMeta, "headshot");
-                const primaryPos = getField(playerMeta, "primary_position");
-                const status = getField(playerMeta, "status"); // e.g. "Q", "O", "IR"
+                const headshot = getField(playerMeta, "primary_position");
+                const primaryPos = getField(playerMeta, "status"); // e.g. "Q", "O", "IR"
 
                 // --- STATS & METRICS ---
                 const STAT_MAP: Record<string, string> = { "12": "pts", "15": "reb", "16": "ast", "19": "st", "20": "blk" };
@@ -390,7 +392,7 @@ async function syncTeamRosterInternal(teamKey: string, accessToken: string, team
                 let marketValue = basePoints * 300000;
 
                 // Injury Adjustment
-                if (status === 'O' || status === 'INJ') {
+                if (primaryPos === 'O' || primaryPos === 'INJ') {
                     marketValue = marketValue * 0.5;
                 }
 
@@ -410,7 +412,7 @@ async function syncTeamRosterInternal(teamKey: string, accessToken: string, team
                         editorialTeam: editorialTeam,
                         photoUrl: headshot?.url,
                         primaryPos: primaryPos,
-                        status: status,
+                        status: primaryPos,
                         fantasyPoints: fantasyPoints,
                         projectedPoints: projectedPoints,
                         percentOwned: percentOwned,
@@ -424,7 +426,7 @@ async function syncTeamRosterInternal(teamKey: string, accessToken: string, team
                         editorialTeam: editorialTeam,
                         photoUrl: headshot?.url,
                         primaryPos: primaryPos,
-                        status: status,
+                        status: primaryPos,
                         fantasyPoints: fantasyPoints,
                         projectedPoints: projectedPoints,
                         percentOwned: percentOwned,
@@ -493,4 +495,154 @@ export async function syncPlayerNews() {
 
     console.log(`[RSS INTEL] Processed news feed. Found ${newsCount} relevant articles.`);
     return { success: true, count: newsCount };
+}
+
+async function syncLeagueTransactions(accessToken: string, leagueKey: string, leagueId: string) {
+    console.log(`[SYNC] Checking transactions for league ${leagueKey}...`);
+    const transactionsData = await getLeagueTransactions(accessToken, leagueKey);
+    
+    const transactions = transactionsData?.fantasy_content?.league?.[1]?.transactions;
+    if (!transactions) return;
+
+    // Yahoo returns an object with keys "0", "1", ... "count"
+    // We need to iterate through them
+    for (const key in transactions) {
+        if (key === "count") continue;
+        const transaction = transactions[key].transaction;
+        if (!transaction) continue;
+
+        // transaction is an array: [ { transaction_key, ... }, { players: ... } ]
+        const meta = transaction[0];
+        const playersData = transaction[1]?.players;
+
+        const transactionKey = meta.transaction_key;
+        const type = meta.type; // trade, add, drop
+        const timestamp = new Date(parseInt(meta.timestamp) * 1000);
+
+        // Check if already processed
+        const existing = await prisma.yahooTransaction.findUnique({
+            where: { transactionKey }
+        });
+
+        if (existing) continue;
+
+        console.log(`[SYNC] Processing new transaction: ${type} (${transactionKey})`);
+
+        // Process Players
+        if (playersData) {
+            // playersData is an object with "0", "1", ... "count"
+            for (const pKey in playersData) {
+                if (pKey === "count") continue;
+                const playerObj = playersData[pKey].player;
+                
+                // playerObj is array: [ { player_key, ... }, { transaction_data: ... } ]
+                const playerMeta = playerObj[0];
+                const transData = playerObj[1]?.transaction_data;
+
+                const playerKey = playerMeta.player_key;
+                const sourceTeamKey = transData?.source_team_key;
+                const destTeamKey = transData?.destination_team_key;
+
+                // Find Player in DB
+                const player = await prisma.player.findUnique({
+                    where: { id: playerKey }
+                });
+
+                if (!player) {
+                    console.warn(`[SYNC] Player not found in DB: ${playerKey}`);
+                    continue;
+                }
+
+                if (type === "trade" && destTeamKey) {
+                    // Find Destination Team
+                    const destTeam = await prisma.team.findUnique({
+                        where: { yahooTeamKey: destTeamKey }
+                    });
+                    // Find Source Team
+                    const sourceTeam = sourceTeamKey ? await prisma.team.findUnique({
+                        where: { yahooTeamKey: sourceTeamKey }
+                    }) : null;
+
+                    if (destTeam) {
+                        await prisma.player.update({
+                            where: { id: player.id },
+                            data: { 
+                                teams: {
+                                    connect: { id: destTeam.id },
+                                    ...(sourceTeam ? { disconnect: { id: sourceTeam.id } } : {})
+                                }
+                            }
+                        });
+                        console.log(`[TRADE] Moved ${player.fullName} to ${destTeam.name}`);
+                    }
+                } else if (type === "add" && destTeamKey) {
+                     const destTeam = await prisma.team.findUnique({
+                        where: { yahooTeamKey: destTeamKey }
+                    });
+
+                    if (destTeam) {
+                        await prisma.player.update({
+                            where: { id: player.id },
+                            data: { 
+                                teams: {
+                                    connect: { id: destTeam.id }
+                                }
+                            }
+                        });
+                        console.log(`[ADD] Added ${player.fullName} to ${destTeam.name}`);
+                    }
+                } else if (type === "drop" && sourceTeamKey) {
+                    const sourceTeam = await prisma.team.findUnique({
+                        where: { yahooTeamKey: sourceTeamKey }
+                    });
+
+                    if (sourceTeam) {
+                        await prisma.player.update({
+                            where: { id: player.id },
+                            data: { 
+                                teams: {
+                                    disconnect: { id: sourceTeam.id }
+                                }
+                            } 
+                        });
+                        console.log(`[DROP] Dropped ${player.fullName} from ${sourceTeam.name}`);
+                    }
+                }
+            }
+        }
+
+        // Record Transaction
+        await prisma.yahooTransaction.create({
+            data: {
+                transactionKey,
+                leagueId,
+                type,
+                timestamp,
+                details: transaction as any
+            }
+        });
+
+        // Notify League Users
+        if (type === "trade") {
+            const leagueUsers = await prisma.user.findMany({
+                where: {
+                    teams: {
+                        some: {
+                            leagueId: leagueId
+                        }
+                    }
+                }
+            });
+
+            for (const user of leagueUsers) {
+                await createNotification(
+                    user.id, 
+                    "TRADE_ALERT", 
+                    "Official Yahoo Update", 
+                    "New Trade Detected in League!", 
+                    `/league/${leagueId}`
+                );
+            }
+        }
+    }
 }

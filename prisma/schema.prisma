@@ -529,3 +529,42 @@ model TradeHistory {
   completedAt DateTime @default(now())
 }
 
+model YahooTransaction {
+  id              String   @id @default(cuid())
+  transactionKey  String   @unique // Yahoo ID (e.g. 423.l.123.tr.45)
+  leagueId        String
+  type            String   // "trade", "add", "drop", "commish"
+  timestamp       DateTime
+  
+  // Store raw data for audit
+  details         Json?    // Who moved where
+  
+  createdAt       DateTime @default(now())
+}
+
+// ==========================================
+// YAHOO TRADE SYNC MODELS
+// ==========================================
+
+model YahooTrade {
+  id            String   @id @default(cuid())
+  yahooTradeId  String?  @unique // Nullable for local drafts
+  leagueId      String
+  status        String   // proposed, accepted, rejected
+  offeredBy     String   // team_key
+  offeredTo     String   // team_key
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  items         YahooTradeItem[]
+}
+
+model YahooTradeItem {
+  id              String @id @default(cuid())
+  tradeId         String
+  trade           YahooTrade  @relation(fields: [tradeId], references: [id])
+  playerKey       String
+  senderTeamKey   String
+  receiverTeamKey String
+}
+
