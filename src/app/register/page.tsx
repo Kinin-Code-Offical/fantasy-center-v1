@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useActionState, useEffect } from "react";
-import { registerUser } from "@/lib/auth-actions";
+import { registerUser, RegisterState } from "@/lib/auth-actions";
 
-const initialState = {
+const initialState: RegisterState = {
     error: "",
+    success: false,
+    message: ""
 };
 
 export default function RegisterPage() {
@@ -22,7 +24,7 @@ export default function RegisterPage() {
     }, [isPending]);
 
     return (
-        <div className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden">
+        <div className="min-h-screen md:min-h-0 md:h-full md:overflow-y-auto flex items-center justify-center px-4 relative custom-scrollbar">
             {/* Back Button */}
             <Link href="/" className="absolute top-8 left-8 text-slate-400 hover:text-neon-cyan transition-colors flex items-center gap-2 group z-30">
                 <svg className="w-5 h-5 transform group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -38,6 +40,11 @@ export default function RegisterPage() {
                 </div>
 
                 <form action={formAction} className="space-y-4">
+                    {state?.success && (
+                        <div className="bg-green-500/10 border border-green-500/50 text-green-400 px-4 py-2 rounded-lg text-sm text-center">
+                            {state.message}
+                        </div>
+                    )}
                     {state?.error && (
                         <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-2 rounded-lg text-sm text-center">
                             {state.error}
@@ -106,6 +113,18 @@ export default function RegisterPage() {
                         <label className="block text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider">Password</label>
                         <input
                             name="password"
+                            type="password"
+                            required
+                            minLength={6}
+                            className="w-full bg-[#030014] border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan transition-colors placeholder-slate-600"
+                            placeholder="••••••••"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider">Confirm Password</label>
+                        <input
+                            name="confirmPassword"
                             type="password"
                             required
                             minLength={6}

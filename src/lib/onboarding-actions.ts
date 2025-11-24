@@ -44,6 +44,7 @@ export async function completeOnboarding(prevState: OnboardingState | null, form
         lastName: formData.get("lastName"),
         birthDate: formData.get("birthDate"),
         password: formData.get("password"),
+        confirmPassword: formData.get("confirmPassword"),
     };
 
     const validated = OnboardingSchema.safeParse(rawData);
@@ -56,6 +57,9 @@ export async function completeOnboarding(prevState: OnboardingState | null, form
     if (validated.data.password && validated.data.password.length > 0) {
         if (validated.data.password.length < 6) {
             return { error: { password: ["Şifre en az 6 karakter olmalıdır."] } };
+        }
+        if (validated.data.password !== rawData.confirmPassword) {
+            return { error: { password: ["Şifreler eşleşmiyor."] } };
         }
         hashedPassword = await hash(validated.data.password, 10);
     }

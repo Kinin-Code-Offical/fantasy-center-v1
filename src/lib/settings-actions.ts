@@ -6,6 +6,8 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { revalidatePath } from "next/cache";
 
 import { hash, compare } from "bcryptjs";
+import { generateVerificationToken } from "@/lib/tokens";
+import { sendVerificationEmail } from "@/lib/mail";
 
 export async function updateUserProfile(formData: FormData) {
     const session = await getServerSession(authOptions);
@@ -71,6 +73,7 @@ export async function updateUserProfile(formData: FormData) {
         }
 
         // Email Update Logic
+        let emailUpdateMessage = "";
         if (email && email !== user.email) {
             const existingEmail = await prisma.user.findUnique({
                 where: { email }
@@ -78,6 +81,17 @@ export async function updateUserProfile(formData: FormData) {
             if (existingEmail) {
                 return { success: false, message: "Email is already in use." };
             }
+
+            // Secure Email Change Flow
+            await prisma.user.update({
+                where: { id: userId },
+                data: { pendingEmail: email }
+            });
+
+            const verificationToken = await generateVerificationToken(email);
+            await sendVerificationEmail(verificationToken.email, verificationToken.token);
+            
+            emailUpdateMessage = `Verification link sent to ${email}. Please confirm to update.`;
         }
 
         // Password Update Logic
@@ -100,10 +114,11 @@ export async function updateUserProfile(formData: FormData) {
                     return { success: false, message: "Incorrect current password." };
                 }
             }
-
-            hashedPassword = await hash(newPassword, 12);
+            
+            hashedPassword = await hash(newPassword, 10);
         }
 
+        // Update User (excluding email)
         await prisma.user.update({
             where: { id: userId },
             data: {
@@ -112,18 +127,46 @@ export async function updateUserProfile(formData: FormData) {
                 lastName: lastName || undefined,
                 bio: bio || undefined,
                 avatarUrl: avatarUrl || undefined,
-                email: email || undefined,
-                password: hashedPassword || undefined,
                 birthDate: birthDateToUpdate,
+                password: hashedPassword,
+                // email is NOT updated here
             }
         });
 
-        revalidatePath(`/user/${username}`);
-        revalidatePath("/profile");
+        revalidatePath(`/user/${username || user.username}`);
+        revalidatePath("/settings");
+        
+        return { 
+            success: true, 
+            message: emailUpdateMessage ? `Profile updated. ${emailUpdateMessage}` : "Profile updated successfully." 
+        };
 
-        return { success: true, message: "Profile updated successfully." };
     } catch (error) {
-        console.error("Profile update error:", error);
+        console.error("Update Profile Error:", error);
         return { success: false, message: "Failed to update profile." };
     }
+}
+
+export async function resendVerificationEmailAction() {
+    const session = await getServerSession(authOptions);
+    const userId = (session?.user as any)?.id;
+
+    if (!userId) {
+        return { success: false, message: "Unauthorized" };
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return { success: false, message: "User not found" };
+
+    const emailToSend = user.pendingEmail || user.email;
+    if (!emailToSend) return { success: false, message: "No email found to verify." };
+
+    if (user.emailVerified && !user.pendingEmail) {
+        return { success: false, message: "Email already verified." };
+    }
+
+    const verificationToken = await generateVerificationToken(emailToSend);
+    await sendVerificationEmail(verificationToken.email, verificationToken.token);
+
+    return { success: true, message: `Verification email sent to ${emailToSend}` };
 }

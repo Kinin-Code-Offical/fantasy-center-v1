@@ -10,7 +10,7 @@ interface Props {
 
 export default function DatabaseAssetCard({ player }: Props) {
     return (
-        <div className="group relative bg-black/20 border border-white/5 rounded-xl overflow-hidden hover:border-white/20 transition-all duration-500 flex flex-col h-[500px] backdrop-blur-sm grayscale hover:grayscale-0">
+        <div className="group relative bg-black/20 border border-white/5 rounded-xl overflow-hidden hover:border-white/20 transition-all duration-500 flex flex-col h-[500px] grayscale hover:grayscale-0">
             {/* Scanline Overlay */}
             <div className="absolute inset-0 pointer-events-none z-0 opacity-5"
                 style={{ backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 2px, #ffffff 3px)" }} />
@@ -28,7 +28,7 @@ export default function DatabaseAssetCard({ player }: Props) {
                 </div>
 
                 {/* Est Value Badge */}
-                <div className="px-3 py-1 bg-black/50 border border-white/10 rounded-full backdrop-blur-sm">
+                <div className="px-3 py-1 bg-black/50 border border-white/10 rounded-full">
                     <span className="text-xs font-bold text-gray-400 font-mono tracking-wider">
                         EST: {formatCurrency(player.marketValue)}
                     </span>

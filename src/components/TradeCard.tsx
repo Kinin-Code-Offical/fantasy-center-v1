@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import ConfirmationModal from "./ConfirmationModal";
 import OfferManager from "@/components/market/OfferManager";
@@ -18,6 +19,12 @@ export default function TradeCard({ listing, userPlayers, currentUserId }: Props
     const [showCancelModal, setShowCancelModal] = useState(false);
     const [showOfferManager, setShowOfferManager] = useState(false);
     const [isCancelling, setIsCancelling] = useState(false);
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
     const isOwner = currentUserId === listing.sellerId;
     const pendingOfferCount = listing.offers?.filter((o: any) => o.status === "PENDING").length || 0;
 
@@ -28,8 +35,12 @@ export default function TradeCard({ listing, userPlayers, currentUserId }: Props
     const confirmCancel = async () => {
         setIsCancelling(true);
         try {
-            await cancelListing(listing.id);
-            setShowCancelModal(false);
+            const result = await cancelListing(listing.id);
+            if (result.success) {
+                setShowCancelModal(false);
+            } else {
+                alert(result.message || "Failed to cancel listing");
+            }
         } catch (error) {
             console.error(error);
             alert("Failed to cancel listing");
@@ -37,6 +48,8 @@ export default function TradeCard({ listing, userPlayers, currentUserId }: Props
             setIsCancelling(false);
         }
     };
+
+    const leagueName = listing.player.teams?.[0]?.league?.name;
 
     return (
         <>
@@ -50,26 +63,16 @@ export default function TradeCard({ listing, userPlayers, currentUserId }: Props
                 isProcessing={isCancelling}
             />
 
-            {showOfferManager && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-                    <div className="relative z-[101] bg-[#0a0a12] border border-white/10 rounded-xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[80vh]">
-                        <div className="p-4 border-b border-white/10 flex justify-between items-center bg-white/5">
-                            <h2 className="text-lg font-black uppercase tracking-widest text-white flex items-center gap-2">
-                                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                                Contract Review Console
-                            </h2>
-                            <button onClick={() => setShowOfferManager(false)} className="text-gray-500 hover:text-white transition-colors">
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-                        <div className="p-4 bg-black/40 overflow-hidden flex-1">
-                            <OfferManager listingId={listing.id} onClose={() => setShowOfferManager(false)} />
-                        </div>
+            {mounted && showOfferManager && createPortal(
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm">
+                    <div className="w-full max-w-5xl relative z-[10000]">
+                        <OfferManager listingId={listing.id} onClose={() => setShowOfferManager(false)} />
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
-            <div className="group relative bg-black/40 border border-white/10 rounded-xl overflow-hidden hover:border-green-500/50 transition-all duration-500 flex flex-col h-[500px] backdrop-blur-sm">
+            <div className="group relative bg-black/40 border border-white/10 rounded-xl overflow-hidden hover:border-green-500/50 transition-all duration-500 flex flex-col h-[500px]">
                 {/* Scanline Overlay */}
                 <div className="absolute inset-0 pointer-events-none z-0 opacity-10"
                     style={{ backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 2px, #22c55e 3px)" }} />
@@ -94,7 +97,7 @@ export default function TradeCard({ listing, userPlayers, currentUserId }: Props
                     </div>
 
                     {/* Market Value Badge */}
-                    <div className="px-3 py-1 bg-black/80 border border-green-500/50 rounded-full backdrop-blur-sm shadow-[0_0_10px_rgba(34,197,94,0.2)]">
+                    <div className="px-3 py-1 bg-black/80 border border-green-500/50 rounded-full shadow-[0_0_10px_rgba(34,197,94,0.2)]">
                         <span className="text-xs font-bold text-green-400 font-mono tracking-wider">
                             {formatCurrency(listing.player.marketValue)}
                         </span>
@@ -102,9 +105,9 @@ export default function TradeCard({ listing, userPlayers, currentUserId }: Props
                 </div>
 
                 {/* Main Asset Image (Hologram Style) */}
-                <div className="relative flex-1 flex items-center justify-center overflow-hidden z-10 mt-8">
+                <Link href={`/player/${listing.player.id}?from=market`} className="relative flex-1 flex items-center justify-center overflow-hidden z-10 mt-8 cursor-pointer group/image">
                     {/* Glowing Circle Container */}
-                    <div className="relative w-40 h-40 rounded-full border-2 border-green-500/30 shadow-[0_0_30px_rgba(34,197,94,0.2)] flex items-center justify-center group-hover:border-green-400 group-hover:shadow-[0_0_50px_rgba(34,197,94,0.5)] transition-all duration-500">
+                    <div className="relative w-40 h-40 rounded-full border-2 border-green-500/30 shadow-[0_0_30px_rgba(34,197,94,0.2)] flex items-center justify-center group-hover/image:border-green-400 group-hover/image:shadow-[0_0_50px_rgba(34,197,94,0.5)] transition-all duration-500">
                         <div className="absolute inset-0 rounded-full border border-green-500/20 animate-ping opacity-20" />
 
                         {listing.player.photoUrl ? (
@@ -112,7 +115,7 @@ export default function TradeCard({ listing, userPlayers, currentUserId }: Props
                                 <img
                                     src={listing.player.photoUrl}
                                     alt={listing.player.fullName}
-                                    className="w-full h-full object-cover sepia hue-rotate-[50deg] contrast-125 opacity-90 group-hover:opacity-100 transition-all duration-500"
+                                    className="w-full h-full object-cover sepia hue-rotate-[50deg] contrast-125 opacity-90 group-hover/image:opacity-100 transition-all duration-500"
                                 />
                                 {/* Glitch/Scan effect on image */}
                                 <div className="absolute inset-0 bg-[linear-gradient(transparent_50%,rgba(0,255,0,0.1)_50%)] bg-[length:100%_4px] pointer-events-none" />
@@ -124,10 +127,15 @@ export default function TradeCard({ listing, userPlayers, currentUserId }: Props
 
                     {/* Player Name Overlay */}
                     <div className="absolute bottom-0 left-0 right-0 p-4 text-center z-20">
-                        <h3 className="text-2xl font-black text-white uppercase italic tracking-tighter drop-shadow-[0_0_5px_rgba(34,197,94,0.8)]">
+                        <h3 className="text-2xl font-black text-white uppercase italic tracking-tighter drop-shadow-[0_0_5px_rgba(34,197,94,0.8)] group-hover/image:text-green-400 transition-colors">
                             {listing.player.fullName}
                         </h3>
                         <div className="flex items-center justify-center gap-3 mt-1">
+                            {leagueName && (
+                                <span className="text-[10px] font-bold text-cyan-400 bg-cyan-900/20 px-2 py-0.5 rounded border border-cyan-500/20 uppercase tracking-widest">
+                                    [{leagueName}]
+                                </span>
+                            )}
                             <span className="text-xs font-bold text-green-400 bg-green-900/20 px-2 py-0.5 rounded border border-green-500/20">
                                 {listing.player.primaryPos}
                             </span>
@@ -136,7 +144,7 @@ export default function TradeCard({ listing, userPlayers, currentUserId }: Props
                             </span>
                         </div>
                     </div>
-                </div>
+                </Link>
 
                 {/* Request / Terminal Readout */}
                 <div className="p-4 bg-black/60 border-t border-white/10 relative overflow-hidden z-10 backdrop-blur-sm">

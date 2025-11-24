@@ -75,7 +75,7 @@ export default function NotificationsInterface({ initialNotifications, username 
     };
 
     return (
-        <div className="min-h-screen pt-24 px-4 md:px-8 pb-20 font-mono relative z-10">
+        <div className="w-full h-auto md:h-full md:overflow-y-auto pt-24 px-4 md:px-8 pb-20 font-mono relative z-10 custom-scrollbar">
             {/* Modal */}
             <ConfirmationModal
                 isOpen={showConfirm}
@@ -87,7 +87,7 @@ export default function NotificationsInterface({ initialNotifications, username 
                 isProcessing={isClearing}
             />
 
-            <div className="max-w-5xl mx-auto">
+            <div className="max-w-5xl mx-auto min-h-full">
                 {/* Header */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                     <div>

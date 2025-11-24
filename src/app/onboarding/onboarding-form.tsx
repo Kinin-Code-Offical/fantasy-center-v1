@@ -78,20 +78,33 @@ export default function OnboardingForm({ user }: { user: any }) {
             </div>
 
             {!user?.password && (
-                <div className="space-y-2">
-                    <label className="text-xs font-bold text-neon-purple tracking-widest uppercase">Set Password</label>
-                    <input
-                        name="password"
-                        type="password"
-                        placeholder="Create a secure password"
-                        required
-                        autoComplete="new-password"
-                        className="w-full bg-[#12122a] border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-neon-cyan transition-all"
-                    />
-                    {state?.error?.password && (
-                        <p className="text-red-400 text-xs">{state.error.password[0]}</p>
-                    )}
-                </div>
+                <>
+                    <div className="space-y-2">
+                        <label className="text-xs font-bold text-neon-purple tracking-widest uppercase">Set Password</label>
+                        <input
+                            name="password"
+                            type="password"
+                            placeholder="Create a secure password"
+                            required
+                            autoComplete="new-password"
+                            className="w-full bg-[#12122a] border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-neon-cyan transition-all"
+                        />
+                        {state?.error?.password && (
+                            <p className="text-red-400 text-xs">{state.error.password[0]}</p>
+                        )}
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-xs font-bold text-neon-purple tracking-widest uppercase">Confirm Password</label>
+                        <input
+                            name="confirmPassword"
+                            type="password"
+                            placeholder="Confirm your password"
+                            required
+                            autoComplete="new-password"
+                            className="w-full bg-[#12122a] border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-neon-cyan transition-all"
+                        />
+                    </div>
+                </>
             )}
 
             <button

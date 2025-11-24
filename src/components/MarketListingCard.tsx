@@ -21,7 +21,7 @@ interface MarketListingCardProps {
 
 export default function MarketListingCard({ player, initiator, lookingFor, createdAt }: MarketListingCardProps) {
     return (
-        <div className="bg-gray-900/80 backdrop-blur-sm border border-white/10 rounded-xl overflow-hidden hover:border-cyan-500/50 transition-all duration-300 group flex flex-col">
+        <div className="bg-gray-900/80 border border-white/10 rounded-xl overflow-hidden hover:border-cyan-500/50 transition-all duration-300 group flex flex-col">
             {/* Player Header */}
             <div className="relative h-32 bg-gradient-to-b from-gray-800 to-gray-900 p-4 flex items-center gap-4">
                 <div className="w-20 h-20 rounded-full bg-gray-700 border-2 border-cyan-500/30 overflow-hidden shrink-0">

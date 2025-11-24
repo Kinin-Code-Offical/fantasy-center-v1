@@ -8,10 +8,22 @@ import FollowButton from "./components/FollowButton";
 import CommentSection from "./components/CommentSection";
 import Navbar from "@/components/Navbar";
 
-export default async function PlayerPage({ params, searchParams }: { params: Promise<{ playerId: string }>, searchParams: Promise<{ leagueId?: string }> }) {
+export default async function PlayerPage({ params, searchParams }: { params: Promise<{ playerId: string }>, searchParams: Promise<{ leagueId?: string, from?: string }> }) {
     const { playerId } = await params;
-    const { leagueId } = await searchParams;
+    const { leagueId, from } = await searchParams;
     const session = await getServerSession(authOptions);
+
+    // Determine Back Link
+    let backLink = "/dashboard";
+    let backLabel = "RETURN TO SECTOR";
+
+    if (from === "market") {
+        backLink = "/market";
+        backLabel = "RETURN TO MARKET";
+    } else if (leagueId) {
+        backLink = `/league/${leagueId}`;
+        backLabel = "RETURN TO LEAGUE";
+    }
 
     // Fetch Player
     const player = await prisma.player.findUnique({
@@ -45,19 +57,19 @@ export default async function PlayerPage({ params, searchParams }: { params: Pro
     const stats = player.stats as Record<string, any> || {};
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white font-mono selection:bg-green-500/30 pt-8 pb-20 relative overflow-hidden">
+        <div className="w-full h-auto md:h-full md:overflow-y-auto bg-[#050505] text-white font-mono selection:bg-green-500/30 pt-8 pb-20 relative custom-scrollbar">
             <Navbar />
 
             {/* Background Grid & Effects */}
             <div className="fixed inset-0 bg-[linear-gradient(to_right,#00ff0005_1px,transparent_1px),linear-gradient(to_bottom,#00ff0005_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none" />
             <div className="fixed top-0 left-0 w-full h-32 bg-gradient-to-b from-green-900/10 to-transparent pointer-events-none" />
 
-            <main className="container mx-auto px-4 max-w-7xl relative z-10">
+            <main className="container mx-auto px-4 max-w-7xl relative z-10 min-h-full">
                 {/* Back Button */}
                 <div className="mb-8">
-                    <Link href={leagueId ? `/league/${leagueId}` : "/dashboard"} className="inline-flex items-center gap-2 text-green-500 hover:text-green-400 transition-colors uppercase tracking-widest text-xs font-bold group">
+                    <Link href={backLink} className="inline-flex items-center gap-2 text-green-500 hover:text-green-400 transition-colors uppercase tracking-widest text-xs font-bold group">
                         <span className="group-hover:-translate-x-1 transition-transform">{"<-"}</span>
-                        RETURN TO SECTOR
+                        {backLabel}
                     </Link>
                 </div>
 

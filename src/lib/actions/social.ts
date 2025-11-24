@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { assertVerified } from "@/lib/auth/guard";
 
 export async function toggleFollowPlayer(playerId: string) {
     const session = await getServerSession(authOptions);
@@ -47,6 +48,7 @@ export async function toggleFollowPlayer(playerId: string) {
 }
 
 export async function postComment(playerId: string, content: string) {
+    await assertVerified();
     const session = await getServerSession(authOptions);
     if (!session || !session.user || !session.user.email) {
         throw new Error("Unauthorized");

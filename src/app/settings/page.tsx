@@ -23,9 +23,9 @@ export default async function SettingsPage() {
     }
 
     return (
-        <div className="min-h-screen bg-[#050505] text-slate-200 pt-24 px-4 pb-20 relative overflow-hidden font-sans">
+        <div className="w-full h-auto md:h-full md:overflow-y-auto bg-[#050505] text-slate-200 pt-24 px-4 pb-20 relative font-sans custom-scrollbar">
 
-            <div className="max-w-2xl mx-auto relative z-10">
+            <div className="max-w-2xl mx-auto relative z-10 min-h-full">
                 {/* Back Link */}
                 <div className="mb-8 flex justify-between items-center">
                     <Link href="/" className="group flex items-center gap-2 text-gray-400 hover:text-green-400 transition-colors text-sm tracking-widest uppercase font-mono">

@@ -9,9 +9,10 @@
   --neon-green: #00ff41;
   --neon-emerald: #008f11;
   --neon-lime: #ccff00;
+  --neon-cyan: #00e5ff;
+  /* Fixed: Cyber Blue */
 
   /* Legacy mappings for compatibility */
-  --neon-cyan: #00ff41;
   --neon-purple: #008f11;
   --neon-pink: #ccff00;
   --neon-yellow: #fcee0a;
@@ -30,9 +31,9 @@
   --color-neon-green: var(--neon-green);
   --color-neon-emerald: var(--neon-emerald);
   --color-neon-lime: var(--neon-lime);
+  --color-neon-cyan: var(--neon-cyan);
 
   /* Legacy mappings */
-  --color-neon-cyan: var(--neon-green);
   --color-neon-purple: var(--neon-emerald);
   --color-neon-pink: var(--neon-lime);
   --color-neon-yellow: var(--neon-yellow);
@@ -120,13 +121,83 @@ body {
   background-color: rgba(10, 20, 10, 0.7);
   box-shadow: inset 0 0 30px rgba(0, 255, 65, 0.1);
 }
+
 @keyframes scan-vertical {
-  0% { top: -10%; opacity: 0; }
-  50% { opacity: 1; }
-  100% { top: 110%; opacity: 0; }
+  0% {
+    top: -10%;
+    opacity: 0;
+  }
+
+  50% {
+    opacity: 1;
+  }
+
+  100% {
+    top: 110%;
+    opacity: 0;
+  }
 }
 
 .animate-scan-vertical {
   animation: scan-vertical 3s linear infinite;
 }
 
+@keyframes scan {
+  0% {
+    transform: translateY(-100%);
+  }
+
+  100% {
+    transform: translateY(100%);
+  }
+}
+
+.animate-scan {
+  animation: scan 3s ease-in-out infinite;
+}
+
+/* Global Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(5, 10, 5, 0.8);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--neon-green);
+  border-radius: 3px;
+  opacity: 0.7;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #00cc33;
+  box-shadow: 0 0 10px var(--neon-green);
+}
+
+/* Firefox Support */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--neon-green) rgba(5, 10, 5, 0.8);
+}
+
+/* Custom Scrollbar Utility (Vertical) */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--neon-green) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0, 255, 65, 0.05);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--neon-green);
+  border-radius: 2px;
+}

@@ -5,17 +5,30 @@ import { hash } from "bcryptjs";
 import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { generateVerificationToken } from "@/lib/tokens";
+import { sendVerificationEmail } from "@/lib/mail";
 
-export async function registerUser(prevState: any, formData: FormData) {
+export type RegisterState = {
+    error?: string;
+    success?: boolean;
+    message?: string;
+};
+
+export async function registerUser(prevState: RegisterState, formData: FormData): Promise<RegisterState> {
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
+    const confirmPassword = formData.get("confirmPassword") as string;
     const firstName = formData.get("firstName") as string;
     const lastName = formData.get("lastName") as string;
     const username = formData.get("username") as string;
     const birthDateStr = formData.get("birthDate") as string;
 
-    if (!email || !password || !firstName || !lastName || !username || !birthDateStr) {
+    if (!email || !password || !confirmPassword || !firstName || !lastName || !username || !birthDateStr) {
         return { error: "Lütfen tüm alanları doldurun." };
+    }
+
+    if (password !== confirmPassword) {
+        return { error: "Şifreler eşleşmiyor." };
     }
 
     // Username format kontrolü
@@ -60,17 +73,17 @@ export async function registerUser(prevState: any, formData: FormData) {
                 lastName,
                 username,
                 birthDate,
-                // E-posta doğrulama şimdilik manuel veya link ile yapılmalı
-                // Biz şimdilik null bırakıyoruz, giriş yaparken kontrol edebiliriz
             },
         });
+
+        const verificationToken = await generateVerificationToken(email);
+        await sendVerificationEmail(verificationToken.email, verificationToken.token);
+
+        return { success: true, message: "Confirmation email sent." };
     } catch (error) {
         console.error("Registration Error:", error);
         return { error: "Kayıt oluşturulurken bir hata oluştu." };
     }
-
-    // Başarılı kayıt sonrası yönlendirme
-    redirect("/api/auth/signin?success=AccountCreated");
 }
 
 export async function deleteAccount() {

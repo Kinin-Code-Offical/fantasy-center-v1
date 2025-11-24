@@ -57,8 +57,8 @@ export default function MarketFilter({ userLeagues }: MarketFilterProps) {
     };
 
     return (
-        <div className="w-full bg-white/5 border-y border-white/10 p-4 backdrop-blur-sm mb-8 flex flex-col gap-4 relative z-30">
-            <div className="flex flex-wrap gap-4 items-center w-full justify-between">
+        <div className="w-full bg-zinc-900/90 border-y border-white/10 p-4 mb-8 flex flex-col gap-4 relative z-10">
+            <div className="flex flex-col md:flex-row gap-4 items-center w-full justify-between">
                 {/* Left: Search Input */}
                 <div className="relative flex-1 w-full md:min-w-[300px]">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />

@@ -33,7 +33,7 @@ export default async function OnboardingPage() {
     }
 
     return (
-        <main className="min-h-screen text-slate-200 flex items-center justify-center relative overflow-hidden">
+        <div className="min-h-screen md:min-h-0 md:h-full md:overflow-y-auto text-slate-200 flex items-center justify-center relative custom-scrollbar">
             <div className="relative z-10 w-full max-w-md p-8 bg-[#0a0a12]/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_0_50px_rgba(0,243,255,0.1)]">
                 <div className="text-center mb-8">
                     <h1 className="text-3xl font-black tracking-tighter text-white mb-2">
@@ -46,6 +46,6 @@ export default async function OnboardingPage() {
 
                 <OnboardingForm user={user} />
             </div>
-        </main>
+        </div>
     );
 }

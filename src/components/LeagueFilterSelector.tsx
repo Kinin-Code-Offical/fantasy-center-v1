@@ -53,13 +53,13 @@ export default function LeagueFilterSelector({ userLeagues }: LeagueFilterSelect
             {/* Trigger Button */}
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className={`relative w-full md:min-w-[240px] flex items-center justify-between bg-black/80 border backdrop-blur-sm rounded-lg overflow-hidden transition-all duration-300 group ${isOpen
+                className={`relative w-full md:min-w-[240px] flex items-center justify-between bg-black/80 border rounded-lg overflow-hidden transition-all duration-300 group ${isOpen
                     ? "border-green-500 shadow-[0_0_15px_rgba(34,197,94,0.3)]"
                     : "border-white/10 hover:border-green-500/50"
                     }`}
             >
                 <div className="flex items-center h-full">
-                    <div className={`px-3 py-3 border-r transition-colors ${isOpen ? "border-green-500/30 bg-green-500/10" : "border-white/10 bg-white/5"}`}>
+                    <div className={`px-3 py-3 border-r transition-colors ${isOpen ? "border-green-500/30 bg-green-500/10" : "border-white/0 bg-white/0"}`}>
                         {currentLeagueId ? (
                             <Shield className={`w-4 h-4 ${isOpen ? "text-green-400" : "text-gray-400"}`} />
                         ) : (

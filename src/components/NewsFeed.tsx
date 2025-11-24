@@ -73,7 +73,7 @@ export default async function NewsFeed() {
                                     </h4>
                                     <div className="flex items-center gap-2 mt-1.5">
                                         <span className="text-[10px] text-gray-500 font-mono">
-                                            {new Date(item.publishedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                            {new Date(item.publishedAt).toLocaleDateString("en-GB", { month: 'short', day: 'numeric' })}
                                         </span>
                                         <span className="text-[10px] text-gray-600">•</span>
                                         <span className="text-[10px] text-gray-500 truncate max-w-[80px]">

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import CreateListingModal from "@/components/CreateListingModal";
 import TradeCard from "@/components/TradeCard";
@@ -15,6 +16,18 @@ interface MarketPageProps {
 export default async function MarketPage({ searchParams }: MarketPageProps) {
     const session = await getServerSession(authOptions);
     const params = await searchParams;
+
+    // Security Check: Verify Identity
+    if (session?.user?.email) {
+        const user = await prisma.user.findUnique({
+            where: { email: session.user.email },
+            select: { emailVerified: true }
+        });
+
+        if (user && !user.emailVerified) {
+            redirect("/settings");
+        }
+    }
 
     const query = typeof params.q === 'string' ? params.q : undefined;
     const position = typeof params.pos === 'string' && params.pos !== 'ALL' ? params.pos : undefined;
@@ -48,8 +61,17 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
             currentUserId = user.id;
             userLeagueIds = user.teams.map(t => t.leagueId);
             userLeagues = user.teams.map(t => ({ id: t.league.id, name: t.league.name }));
-            // Flatten players from all teams the user manages
-            userPlayers = user.teams.flatMap(team => team.players) || [];
+            
+            // Flatten players from all teams and attach league info
+            userPlayers = user.teams.flatMap(team => 
+                team.players.map(player => ({
+                    ...player,
+                    league: {
+                        id: team.league.id,
+                        name: team.league.name
+                    }
+                }))
+            );
 
             // Fetch user's active listings to prevent duplicates
             const userListings = await prisma.tradeListing.findMany({
@@ -72,11 +94,24 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
                 ...(position ? { primaryPos: position } : {})
             },
             include: {
+                teams: {
+                    include: {
+                        league: true
+                    }
+                },
                 listings: {
                     where: { status: "ACTIVE" },
                     include: {
                         seller: true,
-                        player: true,
+                        player: {
+                            include: {
+                                teams: {
+                                    include: {
+                                        league: true
+                                    }
+                                }
+                            }
+                        },
                         offers: true
                     }
                 }
@@ -117,7 +152,15 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
             where: whereClause,
             include: {
                 seller: true,
-                player: true,
+                player: {
+                    include: {
+                        teams: {
+                            include: {
+                                league: true
+                            }
+                        }
+                    }
+                },
                 offers: true
             },
             orderBy: { createdAt: "desc" }
@@ -126,8 +169,8 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
     }
 
     return (
-        <div className="min-h-screen bg-black text-white pt-24 px-4 md:px-8 pb-20">
-            <div className="max-w-7xl mx-auto">
+        <div className="w-full h-auto md:h-full md:overflow-y-auto p-4 md:p-8 pt-24 pb-20 bg-black text-white custom-scrollbar">
+            <div className="max-w-7xl mx-auto min-h-full">
                 {/* Top Navigation */}
                 <div className="mb-8 flex justify-between items-center">
                     <Link href="/" className="group relative px-5 py-2 overflow-hidden bg-black/40 border border-white/10 hover:border-green-500/50 transition-all duration-300"
@@ -176,7 +219,7 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
                 </div>
 
                 {/* Search & Filter */}
-                <div className="relative z-50">
+                <div className="relative z-40">
                     <MarketFilter userLeagues={userLeagues} />
                 </div>
 

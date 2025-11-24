@@ -40,11 +40,12 @@ model Session {
 }
 
 model VerificationToken {
-  identifier String
-  token      String   @unique
-  expires    DateTime
+  id      String   @id @default(cuid())
+  email   String
+  token   String   @unique
+  expires DateTime
 
-  @@unique([identifier, token])
+  @@unique([email, token])
 }
 
 model User {
@@ -52,6 +53,7 @@ model User {
   name          String?
   email         String?   @unique
   emailVerified DateTime?
+  pendingEmail  String?   @unique // Stores the new email until verified
   image         String?
   password      String?   // Şifre (Hashlenmiş) - Credentials için
 
@@ -74,6 +76,8 @@ model User {
   
   teams         Team[]
   ledgers       Ledger[]      // Cüzdan Geçmişi
+  salesHistory    TradeHistory[] @relation("SellerHistory")
+  purchaseHistory TradeHistory[] @relation("BuyerHistory")
   notifications Notification[]
   
   // [YENİ] Alarm ve Analiz
@@ -509,5 +513,19 @@ model TradeOffer {
   offeredPlayerId String? // The player being offered in exchange
   offeredPlayer   Player? @relation(fields: [offeredPlayerId], references: [id])
   offeredCredits  Float   @default(0) // Optional sweetener
+}
+
+// 2. Trade History (Completed Swaps)
+model TradeHistory {
+  id          String   @id @default(cuid())
+  sellerId    String
+  buyerId     String
+  seller      User     @relation("SellerHistory", fields: [sellerId], references: [id])
+  buyer       User     @relation("BuyerHistory", fields: [buyerId], references: [id])
+  
+  assetsGiven Json     // Snapshot of players/credits given by Seller
+  assetsReceived Json  // Snapshot of players/credits given by Buyer
+  
+  completedAt DateTime @default(now())
 }
 

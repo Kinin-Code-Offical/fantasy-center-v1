@@ -10,14 +10,27 @@ import StandingsWidget from "@/components/league/StandingsWidget";
 import Navbar from "@/components/Navbar";
 import BackButton from "@/components/BackButton";
 
-export default async function LeaguePage({ params }: { params: Promise<{ leagueId: string }> }) {
+export default async function LeaguePage({ params, searchParams }: { params: Promise<{ leagueId: string }>, searchParams: Promise<{ viewTeamId?: string }> }) {
     const session = await getServerSession(authOptions);
     if (!session) {
         redirect("/login");
     }
 
+    // Security Check: Verify Identity
+    if (session?.user?.email) {
+        const user = await prisma.user.findUnique({
+            where: { email: session.user.email },
+            select: { emailVerified: true }
+        });
+
+        if (user && !user.emailVerified) {
+            redirect("/settings");
+        }
+    }
+
     const userId = (session.user as any).id;
     const { leagueId } = await params;
+    const { viewTeamId } = await searchParams;
     const decodedLeagueId = decodeURIComponent(leagueId);
 
     // Fetch League Details
@@ -58,11 +71,24 @@ export default async function LeaguePage({ params }: { params: Promise<{ leagueI
     // Find User's Team in this League
     const userTeam = league.teams.find(t => t.managerId === userId);
 
-    // Fetch Roster for User's Team
+    // Determine which team to view
+    let displayedTeamId = userTeam?.id;
+    if (viewTeamId) {
+        // Verify the team belongs to this league
+        const requestedTeam = league.teams.find(t => t.id === viewTeamId);
+        if (requestedTeam) {
+            displayedTeamId = requestedTeam.id;
+        }
+    }
+
+    const isViewingRival = displayedTeamId !== userTeam?.id;
+    const displayedTeam = league.teams.find(t => t.id === displayedTeamId);
+
+    // Fetch Roster for Displayed Team
     let rosterPlayers: any[] = [];
-    if (userTeam) {
+    if (displayedTeamId) {
         const teamWithRoster = await prisma.team.findUnique({
-            where: { id: userTeam.id },
+            where: { id: displayedTeamId },
             include: {
                 players: true
             }
@@ -84,14 +110,14 @@ export default async function LeaguePage({ params }: { params: Promise<{ leagueI
     }));
 
     return (
-        <div className="min-h-screen bg-[#050505] text-slate-200 pt-8 px-4 md:px-8 pb-20 relative overflow-hidden font-sans">
+        <div className="w-full h-auto md:h-full md:overflow-y-auto bg-[#050505] text-slate-200 pt-8 px-4 md:px-8 pb-20 relative font-sans custom-scrollbar">
             <Navbar />
 
             {/* Background Grid & Effects */}
             <div className="fixed inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
             <div className="fixed top-0 left-0 w-full h-32 bg-gradient-to-b from-green-900/10 to-transparent pointer-events-none" />
 
-            <div className="max-w-7xl mx-auto relative z-10">
+            <div className="max-w-7xl mx-auto relative z-10 min-h-full">
                 {/* Navigation & Breadcrumbs */}
                 <div className="mb-8 flex justify-between items-center">
                     <Link href="/" className="group flex items-center gap-3 px-4 py-2 bg-black/40 border border-white/10 rounded-full hover:bg-green-900/20 hover:border-green-500/50 transition-all duration-300 backdrop-blur-md">
@@ -174,18 +200,18 @@ export default async function LeaguePage({ params }: { params: Promise<{ leagueI
                                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
                                         <span className="relative inline-flex rounded-full h-3 w-3 bg-cyan-500"></span>
                                     </span>
-                                    Active Roster
+                                    {displayedTeam ? displayedTeam.name : "Active Roster"}
                                 </h2>
                                 <div className="text-xs font-mono text-cyan-500/70 bg-cyan-950/30 px-3 py-1 rounded border border-cyan-500/20">
                                     {rosterPlayers.length} UNITS DEPLOYED
                                 </div>
                             </div>
-                            <RosterTable players={rosterPlayers} leagueId={league.id} />
+                            <RosterTable players={rosterPlayers} leagueId={league.id} isViewingRival={isViewingRival} />
                         </div>
 
                         {/* Sidebar - Standings & Info */}
                         <div className="space-y-6">
-                            <StandingsWidget teams={standingsData} />
+                            <StandingsWidget teams={standingsData} leagueId={league.id} viewTeamId={displayedTeamId} />
 
                             {/* Additional Info Widget (Placeholder for future) */}
                             <div className="rounded-xl border border-white/5 bg-white/[0.02] p-6">

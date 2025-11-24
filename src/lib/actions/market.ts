@@ -4,8 +4,12 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { revalidatePath } from "next/cache";
+import { createNotification } from "@/lib/actions/notifications";
+import { assertVerified } from "@/lib/auth/guard";
+import { logTransaction, logTrade } from "@/lib/logger";
 
 export async function createListing(playerId: string, notes: string) {
+    await assertVerified();
     const session = await getServerSession(authOptions);
     if (!session?.user) throw new Error("Unauthorized");
     const userId = (session.user as any).id;
@@ -49,35 +53,36 @@ export async function createListing(playerId: string, notes: string) {
 
 export async function cancelListing(listingId: string) {
     const session = await getServerSession(authOptions);
-    if (!session?.user) throw new Error("Unauthorized");
+    if (!session?.user) return { success: false, message: "Unauthorized" };
     const userId = (session.user as any).id;
 
     const listing = await prisma.tradeListing.findUnique({
         where: { id: listingId }
     });
 
-    if (!listing) throw new Error("Listing not found");
-
-    if (listing.sellerId !== userId) {
-        throw new Error("You are not the owner of this listing");
+    if (!listing || listing.sellerId !== userId) {
+        return { success: false, message: "Permission Denied or Listing Not Found" };
     }
 
-    await prisma.tradeListing.delete({
-        where: { id: listingId }
+    await prisma.tradeListing.update({
+        where: { id: listingId },
+        data: { status: "CANCELLED" }
     });
 
     revalidatePath("/market");
-    return { success: true };
+    return { success: true, message: "Listing revoked successfully." };
 }
 
 export async function makeOffer(listingId: string, offeredPlayerId: string, credits: number) {
+    await assertVerified();
     const session = await getServerSession(authOptions);
     if (!session?.user) throw new Error("Unauthorized");
     const userId = (session.user as any).id;
 
     // Verify listing exists and is active
     const listing = await prisma.tradeListing.findUnique({
-        where: { id: listingId }
+        where: { id: listingId },
+        include: { player: true }
     });
 
     if (!listing || listing.status !== "ACTIVE") {
@@ -102,9 +107,9 @@ export async function makeOffer(listingId: string, offeredPlayerId: string, cred
 
     // Verify credits
     const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user || user.credits < credits) {
-        throw new Error("Insufficient credits.");
-    }
+    // if (!user || user.credits < credits) {
+    //     throw new Error("Insufficient credits.");
+    // }
 
     await prisma.tradeOffer.create({
         data: {
@@ -116,11 +121,21 @@ export async function makeOffer(listingId: string, offeredPlayerId: string, cred
         }
     });
 
+    // Send Notification to Seller
+    await createNotification(
+        listing.sellerId,
+        "TRADE_OFFER",
+        "INCOMING CONTRACT PROPOSAL",
+        `A manager has submitted an offer for ${listing.player.fullName}. Review immediately.`,
+        `/trades`
+    );
+
     revalidatePath("/market");
     return { success: true };
 }
 
 export async function acceptOffer(offerId: string) {
+    await assertVerified();
     const session = await getServerSession(authOptions);
     if (!session?.user) throw new Error("Unauthorized");
     const userId = (session.user as any).id;
@@ -218,7 +233,20 @@ export async function acceptOffer(offerId: string) {
                 where: { id: userId },
                 data: { credits: { increment: offer.offeredCredits } }
             });
+
+            // Log Financial Transaction
+            await logTransaction(userId, offer.offeredCredits, "TRADE_INCOME", `Trade Income: ${offer.listing.playerId}`, tx);
+            await logTransaction(offer.offererId, -offer.offeredCredits, "TRADE_EXPENSE", `Trade Expense: ${offer.listing.playerId}`, tx);
         }
+
+        // Log Trade History
+        await logTrade(
+            userId,
+            offer.offererId,
+            { playerId: offer.listing.playerId }, // Assets Given by Seller
+            { playerId: offer.offeredPlayerId, credits: offer.offeredCredits }, // Assets Given by Buyer
+            tx
+        );
 
         // 4. Cleanup & Status Update
         await tx.tradeListing.update({
@@ -264,37 +292,51 @@ export async function acceptOffer(offerId: string) {
 
 export async function rejectOffer(offerId: string) {
     const session = await getServerSession(authOptions);
-    if (!session?.user) throw new Error("Unauthorized");
+    if (!session?.user) return { success: false, message: "Unauthorized" };
     const userId = (session.user as any).id;
 
     const offer = await prisma.tradeOffer.findUnique({
         where: { id: offerId },
-        include: {
-            listing: true
-        }
+        include: { listing: true }
     });
 
-    if (!offer) throw new Error("Offer not found.");
-
-    // Only the seller (listing owner) can reject an offer
-    if (offer.listing.sellerId !== userId) throw new Error("Unauthorized.");
+    if (!offer) return { success: false, message: "Offer not found" };
+    
+    // Only the seller can reject
+    if (offer.listing.sellerId !== userId) {
+        return { success: false, message: "Permission Denied" };
+    }
 
     await prisma.tradeOffer.update({
         where: { id: offerId },
         data: { status: "REJECTED" }
     });
 
-    // Notify Offerer
-    await prisma.notification.create({
-        data: {
-            userId: offer.offererId,
-            type: "TRADE_REJECTED",
-            title: "Offer Rejected",
-            message: `Your offer for ${offer.listing.playerId} was declined.`
-        }
+    revalidatePath("/market");
+    revalidatePath("/trades");
+    return { success: true };
+}
+
+export async function cancelOffer(offerId: string) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) return { success: false, message: "Unauthorized" };
+    const userId = (session.user as any).id;
+
+    const offer = await prisma.tradeOffer.findUnique({
+        where: { id: offerId }
+    });
+
+    if (!offer || offer.offererId !== userId) {
+        return { success: false, message: "Permission Denied" };
+    }
+
+    await prisma.tradeOffer.update({
+        where: { id: offerId },
+        data: { status: "CANCELLED" }
     });
 
     revalidatePath("/market");
+    revalidatePath("/trades");
     return { success: true };
 }
 
@@ -318,10 +360,107 @@ export async function getOffersForListing(listingId: string) {
         },
         include: {
             offerer: true,
-            offeredPlayer: true
+            offeredPlayer: true,
+            listing: {
+                include: {
+                    player: true
+                }
+            }
         },
         orderBy: { createdAt: "desc" }
     });
 
     return offers;
+}
+
+export async function getPendingOffersCount() {
+    const session = await getServerSession(authOptions);
+    const userId = (session?.user as any)?.id;
+
+    if (!userId) return 0;
+
+    // Count offers on my listings
+    const count = await prisma.tradeOffer.count({
+        where: {
+            listing: {
+                sellerId: userId,
+                status: "ACTIVE"
+            },
+            status: "PENDING"
+        }
+    });
+
+    return count;
+}
+
+export async function makeDirectOffer(targetPlayerId: string, offeredPlayerId: string, credits: number, leagueId: string) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) throw new Error("Unauthorized");
+    const userId = (session.user as any).id;
+
+    // 1. Verify Target Player
+    const targetPlayer = await prisma.player.findUnique({
+        where: { id: targetPlayerId },
+        include: {
+            teams: {
+                where: { leagueId: leagueId },
+                include: { manager: true }
+            }
+        }
+    });
+
+    if (!targetPlayer) throw new Error("Target player not found.");
+    const targetTeam = targetPlayer.teams[0];
+    if (!targetTeam) throw new Error("Target player is not in this league.");
+    const targetManagerId = targetTeam.managerId;
+
+    if (targetManagerId === userId) {
+        throw new Error("You cannot trade with yourself.");
+    }
+
+    // 2. Verify Ownership of Offered Player
+    if (offeredPlayerId) {
+        const userTeams = await prisma.team.findMany({
+            where: { managerId: userId, leagueId: leagueId },
+            include: { players: true }
+        });
+        const ownsPlayer = userTeams.some(team => team.players.some(p => p.id === offeredPlayerId));
+        if (!ownsPlayer) {
+            throw new Error("You do not own the player you are offering.");
+        }
+    }
+
+    // 3. Create "Shadow" Listing (Direct Request)
+    // We create a listing to attach the offer to, but it's not "ACTIVE" in the public market.
+    const listing = await prisma.tradeListing.create({
+        data: {
+            sellerId: targetManagerId, // The owner of the target player is the "seller"
+            playerId: targetPlayerId,
+            status: "DIRECT_REQUEST", // Special status
+            notes: "Direct Offer Initiated",
+        }
+    });
+
+    // 4. Create the Offer
+    await prisma.tradeOffer.create({
+        data: {
+            listingId: listing.id,
+            offererId: userId,
+            offeredPlayerId: offeredPlayerId || null,
+            offeredCredits: credits,
+            status: "PENDING"
+        }
+    });
+
+    // 5. Notification
+    await createNotification(
+        targetManagerId,
+        "DIRECT_TRADE_REQUEST",
+        `New trade offer received for ${targetPlayer.fullName}`,
+        `/market/${listing.id}` // Or wherever they should view it. Maybe /trades?
+    );
+
+    revalidatePath("/market");
+    revalidatePath("/trades");
+    return { success: true, listingId: listing.id };
 }

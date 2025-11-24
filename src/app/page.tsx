@@ -7,7 +7,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import YahooButton from "@/components/YahooButton";
-import ServerStatus from "@/components/ServerStatus";
 import StatPanel from "@/components/StatPanel";
 import PlayerPanel from "@/components/PlayerPanel";
 import LoginCard from "@/components/LoginCard";
@@ -62,7 +61,6 @@ export default async function Home() {
     <main className="min-h-screen text-slate-200 overflow-hidden relative selection:bg-neon-cyan selection:text-black">
       <div className="relative z-20">
         <Navbar />
-        <ServerStatus />
 
         {/* HERO SECTION (If not logged in) */}
         {!session ? (

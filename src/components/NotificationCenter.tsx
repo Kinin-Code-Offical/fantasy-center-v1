@@ -16,7 +16,11 @@ interface Notification {
     createdAt: Date;
 }
 
-export default function NotificationCenter() {
+interface NotificationCenterProps {
+    align?: "left" | "right";
+}
+
+export default function NotificationCenter({ align = "right" }: NotificationCenterProps) {
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [isOpen, setIsOpen] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
@@ -81,7 +85,7 @@ export default function NotificationCenter() {
             </button>
 
             {isOpen && (
-                <div className="absolute right-0 mt-2 w-80 md:w-96 bg-black/90 backdrop-blur-xl border border-green-500/30 rounded-lg shadow-[0_0_30px_rgba(0,255,0,0.1)] z-50 overflow-hidden">
+                <div className={`absolute ${align === "right" ? "right-0" : "left-0"} mt-2 w-80 md:w-96 bg-black/90 backdrop-blur-md border border-green-500/30 rounded-lg shadow-[0_0_30px_rgba(0,255,0,0.1)] z-50 overflow-hidden`}>
                     <div className="p-3 border-b border-green-500/20 flex justify-between items-center bg-green-900/10">
                         <h3 className="text-xs font-mono font-bold text-green-400 tracking-widest">SYSTEM LOGS // INCOMING</h3>
                         <button onClick={() => setIsOpen(false)} className="text-gray-500 hover:text-white">

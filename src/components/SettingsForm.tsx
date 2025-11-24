@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { updateUserProfile } from "@/lib/settings-actions";
+import { updateUserProfile, resendVerificationEmailAction } from "@/lib/settings-actions";
 import { useRouter } from "next/navigation";
-import { Save, Loader2, User, FileText, Image as ImageIcon, Mail, Lock, Shield, Calendar, X } from "lucide-react";
+import { Save, Loader2, User, FileText, Image as ImageIcon, Mail, Lock, Shield, Calendar, X, RefreshCw } from "lucide-react";
 import AvatarSelector from "./AvatarSelector";
 import Image from "next/image";
 
@@ -16,39 +16,87 @@ interface SettingsFormProps {
         avatarUrl: string | null;
         email: string | null;
         birthDate: Date | null;
+        pendingEmail?: string | null;
+        emailVerified?: Date | null;
     };
 }
 
 export default function SettingsForm({ user }: SettingsFormProps) {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
+    const [resendLoading, setResendLoading] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
     const [showAvatarSelector, setShowAvatarSelector] = useState(false);
     const [avatarUrl, setAvatarUrl] = useState(user.avatarUrl || "");
 
     const formattedBirthDate = user.birthDate ? new Date(user.birthDate).toISOString().split('T')[0] : "";
 
-    async function handleSubmit(formData: FormData) {
-        setLoading(true);
-        setMessage(null);
-
-        // Append avatarUrl manually since it's controlled state
-        formData.set('avatarUrl', avatarUrl);
-
-        const result = await updateUserProfile(formData);
-
-        if (result.success) {
-            setMessage({ type: 'success', text: result.message });
-            router.refresh();
-        } else {
-            setMessage({ type: 'error', text: result.message });
+    const handleResendEmail = async () => {
+        setResendLoading(true);
+        try {
+            const result = await resendVerificationEmailAction();
+            if (result.success) {
+                setMessage({ type: 'success', text: result.message });
+            } else {
+                setMessage({ type: 'error', text: result.message });
+            }
+        } catch (error) {
+            setMessage({ type: 'error', text: "Failed to resend email." });
+        } finally {
+            setResendLoading(false);
         }
-        setLoading(false);
-    }
+    };
 
     return (
-        <>
-            <form action={handleSubmit} className="space-y-8">
+        <div className="space-y-8">
+            {/* Verification Warning */}
+            {(!user.emailVerified || user.pendingEmail) && (
+                <div className="p-4 border border-yellow-500/30 bg-yellow-500/10 rounded-lg flex flex-col md:flex-row items-start md:items-center gap-4 justify-between">
+                    <div className="flex items-start gap-3">
+                        <Shield className="w-5 h-5 text-yellow-500 mt-0.5 shrink-0" />
+                        <div>
+                            <h3 className="text-yellow-500 font-bold text-sm uppercase tracking-wider mb-1">
+                                Security Alert
+                            </h3>
+                            <p className="text-yellow-200/80 text-sm">
+                                {user.pendingEmail 
+                                    ? `Pending change to ${user.pendingEmail}. Please check your inbox to verify.`
+                                    : "Your account is not verified. Some features (Trading, Market...) are restricted."}
+                            </p>
+                        </div>
+                    </div>
+                    <button 
+                        onClick={handleResendEmail}
+                        disabled={resendLoading}
+                        className="px-3 py-1.5 bg-yellow-500/20 hover:bg-yellow-500/30 border border-yellow-500/50 rounded text-xs font-bold text-yellow-400 uppercase tracking-wider flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                    >
+                        {resendLoading ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                            <RefreshCw className="w-3 h-3" />
+                        )}
+                        Resend Email
+                    </button>
+                </div>
+            )}
+
+            <form action={async (formData) => {
+                setLoading(true);
+                setMessage(null);
+
+                // Append avatarUrl manually since it's controlled state
+                formData.set('avatarUrl', avatarUrl);
+
+                const result = await updateUserProfile(formData);
+
+                if (result.success) {
+                    setMessage({ type: 'success', text: result.message });
+                    router.refresh();
+                } else {
+                    setMessage({ type: 'error', text: result.message });
+                }
+                setLoading(false);
+            }} className="space-y-8">
                 {message && (
                     <div className={`p-4 rounded border ${message.type === 'success' ? 'bg-green-500/10 border-green-500/50 text-green-400' : 'bg-red-500/10 border-red-500/50 text-red-400'}`}>
                         <p className="text-sm font-mono">{message.text}</p>
@@ -251,6 +299,6 @@ export default function SettingsForm({ user }: SettingsFormProps) {
                     onClose={() => setShowAvatarSelector(false)}
                 />
             )}
-        </>
+        </div>
     );
 }
