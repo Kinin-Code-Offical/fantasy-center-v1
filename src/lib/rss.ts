@@ -89,11 +89,23 @@ export async function fetchAndProcessNews(priorityPlayers: Player[]) {
 
     // 3. Batch Write
     if (newsItemsToUpsert.length > 0) {
-        console.log(`[RSS] Executing ${newsItemsToUpsert.length} DB operations in batches...`);
+        // Deduplicate items based on playerId and headline to avoid race conditions in Promise.all
+        const uniqueItemsMap = new Map<string, typeof newsItemsToUpsert[0]>();
+
+        for (const item of newsItemsToUpsert) {
+            const key = `${item.playerId}|${item.headline}`;
+            if (!uniqueItemsMap.has(key)) {
+                uniqueItemsMap.set(key, item);
+            }
+        }
+
+        const uniqueNewsItems = Array.from(uniqueItemsMap.values());
+
+        console.log(`[RSS] Executing ${uniqueNewsItems.length} DB operations in batches...`);
 
         const BATCH_SIZE = 5;
-        for (let i = 0; i < newsItemsToUpsert.length; i += BATCH_SIZE) {
-            const batch = newsItemsToUpsert.slice(i, i + BATCH_SIZE);
+        for (let i = 0; i < uniqueNewsItems.length; i += BATCH_SIZE) {
+            const batch = uniqueNewsItems.slice(i, i + BATCH_SIZE);
             await Promise.all(batch.map(item =>
                 prisma.playerNews.upsert({
                     where: {
