@@ -36,135 +36,87 @@ export default function TradeProposalManager({
     const router = useRouter();
 
     // A. Synchronous Open (Critical for avoiding blockers)
-    const handleOpenTrade = () => {
-        console.log("[Trade Debug] Button Clicked. Starting synchronous flow.");
+    const handleOpenTrade = (e: React.MouseEvent<HTMLButtonElement>) => {
+        // CRITICAL FIX: Form göndermeyi durdur.
+        e.preventDefault();
+        e.stopPropagation();
 
-        try {
-            // 1. Calculate URL Synchronously (Client-side only)
-            // Do NOT use async server actions here.
-            const tradeUrl = getTradeRedirectUrl(
-                gameCode,
-                leagueKey,
-                sourceTeamKey,
-                targetTeamKey,
-                offeredPlayerKeys,
-                requestedPlayerKeys
-            );
+        console.log("%c[BROWSER] 1. Click Event Fired. Preventing default form submission.", "color: #9C27B0; font-weight: bold;");
 
-            // 2. Define Popup Features (NO SPACES allowed in feature string for cross-browser support)
-            const width = 1024;
-            const height = 800;
-            const left = (window.screen.width - width) / 2;
-            const top = (window.screen.height - height) / 2;
+        // 3. Popup Özellikleri (BOŞLUKSUZ)
+        const w = 1024;
+        const h = 800;
+        const left = window.screen.width / 2 - w / 2;
+        const top = window.screen.height / 2 - h / 2;
+        // Features string must be strictly adhered to: NO SPACES after commas!
+        const features = `width=${w},height=${h},top=${top},left=${left},scrollbars=yes,resizable=yes,status=no,location=no,toolbar=no,menubar=no`;
 
-            // STRICT FORMAT: comma-separated, no spaces
-            const features = `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,resizable=yes,status=no,location=no,toolbar=no,menubar=no`;
+        // 4. about:blank ile pencereyi anında aç
+        // Bu, tarayıcının güvenlik kontrolünü geçmesini sağlar.
+        const newWindow = window.open("about:blank", "YahooTradeWindow", features);
 
-            console.log("[Trade Debug] Window Features String:", features);
-
-            // 3. Open Window Immediately
-            console.log("[Trade Debug] Calling window.open()...");
-            // Store reference in a ref
-            const newWindow = window.open(tradeUrl, 'YahooTradeWindow', features);
-
-            // 4. Fallback for Blockers
-            if (!newWindow) {
-                console.error("[Trade Debug] window.open returned null! POPUP BLOCKED.");
-                alert("Please allow popups for this site to complete the trade.");
-                return;
-            }
-
-            if (newWindow.closed) {
-                console.error("[Trade Debug] New window is immediately closed?");
-                return;
-            }
-
-            console.log("[Trade Debug] Window Object:", newWindow);
-            console.log(`[Trade Debug] Opened Window Dimensions: ${newWindow.innerWidth}x${newWindow.innerHeight}`);
-
-            popupRef.current = newWindow;
-
-            // Focus attempt
-            try {
-                newWindow.focus();
-                console.log("[Trade Debug] Focus command sent to new window.");
-            } catch (e) {
-                console.warn("[Trade Debug] Could not focus window:", e);
-            }
-
-            // 5. Start Verification State
-            setStatus('verifying');
-
-        } catch (error: any) {
-            console.error(error);
-            showToast(error.message, "error");
+        if (!newWindow || newWindow.closed) {
+            alert("Popup engellendi! Lütfen bu site için izin verin.");
+            return;
         }
-    };
 
-    // C. Mobile & Background Handling (The "Focus" Trick)
-    useEffect(() => {
-        if (status !== 'verifying') return;
+        // Yönlendirme yapılana kadar loading ekranı göster.
+        newWindow.document.write('<body style="background:#f4f4f4; font-family:sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh;"><h3>Redirecting to Yahoo Fantasy...</h3></body>');
 
-        const verifyTrade = async (triggerSource: string) => {
-            console.log(`[Trade Debug] Verification triggered via: ${triggerSource}`);
 
-            if (!popupRef.current) {
-                console.warn("[Trade Debug] popupRef is null, stopping verification.");
-                return;
-            }
-
-            // A. Check if user manually closed the popup (Cancellation)
-            if (popupRef.current.closed) {
-                console.log("[Trade Debug] Detected window closed by user.");
-                setStatus('idle');
-                // Optional: Show "Trade Cancelled" toast
-                return;
-            }
-
-            console.log("[Trade Debug] Window is open. Calling Server Action...");
-
-            // B. Check Yahoo API via Server Action
-            // This action checks for a pending trade created in the last 3 minutes
+        // 5. URL'i hesapla ve yönlendir
+        setTimeout(() => {
             try {
-                const response = await verifyAndSaveTrade(
+                const tradeUrl = getTradeRedirectUrlLocal(
+                    gameCode,
                     leagueKey,
                     sourceTeamKey,
-                    listingId,
+                    targetTeamKey,
                     offeredPlayerKeys,
                     requestedPlayerKeys
                 );
 
-                console.log("[Trade Debug] Server Action Result:", response);
+                console.log("%c[BROWSER] 2. Popup Yönlendiriliyor:", "color: blue;", tradeUrl);
+                newWindow.location.href = tradeUrl;
 
-                if (response.success) {
-                    console.log("[Trade Debug] SUCCESS! Closing window & refreshing.");
-                    // SUCCESS SEQUENCE
-                    setStatus('success');
-                    showToast("Trade Successfully Proposed! 🚀", "success");
+                popupRef.current = newWindow;
+                setStatus('verifying');
 
-                    // 1. Close the Yahoo Window
-                    popupRef.current.close();
+            } catch (error) {
+                console.error("%c[BROWSER ERROR] URL Hatası:", "color: red;", error);
+                newWindow.close();
+                setStatus('idle');
+                showToast("Trade linki oluşturulamadı", "error");
+            }
+        }, 100);
+    };    // C. Mobile & Background Handling (The "Focus" Trick)
+    useEffect(() => {
+        if (status !== 'verifying') return;
 
-                    // 2. Refresh UI
-                    router.refresh();
+        const verify = async () => {
+            if (!popupRef.current) return;
 
-                    if (onSuccess) onSuccess();
-                } else {
-                    console.log("[Trade Debug] Trade not found yet on Yahoo.");
-                }
-            } catch (err) {
-                console.error("[Trade Debug] Verification Error:", err);
+            if (popupRef.current.closed) {
+                console.log("[BROWSER] Popup was closed by user.");
+                setStatus('idle');
+                return;
+            }
+
+            // Call Server Action
+            const result = await verifyAndSaveTrade(leagueKey, sourceTeamKey, listingId, offeredPlayerKeys, requestedPlayerKeys);
+
+            if (result.success) {
+                console.log("[BROWSER] Trade Verified! Closing popup.");
+                popupRef.current.close();
+                setStatus('success');
+                showToast("Trade Offer Sent Successfully!", "success");
+                router.refresh();
+                if (onSuccess) onSuccess();
             }
         };
 
-        // Polling (Desktop) - Check every 2 seconds
-        const timer = setInterval(() => verifyTrade('Interval'), 2000);
-
-        // Focus Listener (Mobile) - Check immediately when user returns to tab
-        const onFocus = () => {
-            console.log("User returned to app, checking trade status...");
-            verifyTrade('Focus/Visibility');
-        };
+        const timer = setInterval(verify, 2000);
+        const onFocus = () => verify();
 
         window.addEventListener('focus', onFocus);
         document.addEventListener('visibilitychange', onFocus);
@@ -174,10 +126,11 @@ export default function TradeProposalManager({
             window.removeEventListener('focus', onFocus);
             document.removeEventListener('visibilitychange', onFocus);
         };
-    }, [status, leagueKey, sourceTeamKey, listingId, offeredPlayerKeys, requestedPlayerKeys, onSuccess, router, showToast]);
+    }, [status, leagueKey, sourceTeamKey, listingId]); // Add dependencies
 
     return (
         <button
+            type="button"
             onClick={handleOpenTrade}
             disabled={status === 'verifying' || status === 'success'}
             className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${status === 'verifying'
@@ -198,30 +151,23 @@ export default function TradeProposalManager({
     );
 }
 
-function getTradeRedirectUrl(
+// GITHUB COPILOT INSTRUCTION START
+
+// 1. URL Helper'ı Local olarak tanımla
+// NOT: Bu fonksiyon, tarayıcıda senkronize çalışmalı ve manuel string birleştirme yapmalıdır.
+function getTradeRedirectUrlLocal(
     sportCode: string,
     leagueKey: string,
     sourceTeamKey: string,
     targetTeamKey: string,
     offeredPlayerKeys: string[],
     requestedPlayerKeys: string[]
-) {
-    console.log("[Trade Debug] Generating URL...");
-    console.log("  - Sport Code:", sportCode);
-    console.log("  - League:", leagueKey);
-    console.log("  - Source Team:", sourceTeamKey);
-    console.log("  - Target Team:", targetTeamKey);
-    console.log("  - Offered:", offeredPlayerKeys);
-    console.log("  - Requested:", requestedPlayerKeys);
-
-    // 1. Parse IDs
+): string {
     const getIntId = (key: string) => key.split('.').pop() || '';
-
-    const leagueId = getIntId(leagueKey);
+    const leagueId = leagueKey.split('.')[2];
     const sourceTeamId = getIntId(sourceTeamKey);
     const targetTeamId = getIntId(targetTeamKey);
 
-    // 2. Determine Subdomain & Path
     let subdomain = "fantasysports";
     let sportPath = "";
 
@@ -248,25 +194,18 @@ function getTradeRedirectUrl(
             break;
     }
 
-    // 3. Construct Base URL
-    // Example: https://basketball.fantasysports.yahoo.com/nba/12345/1/proposetrade?stage=1&mid2=9
     const baseUrl = `https://${subdomain}.yahoo.com/${sportPath}/${leagueId}/${sourceTeamId}/proposetrade`;
 
-    // 4. Build Query String Manually
     let queryString = `?stage=1&mid2=${targetTeamId}`;
 
-    // Loop through offered players (Source/Team1)
-    offeredPlayerKeys.forEach(key => {
+    // KRİTİK YENİ KURAL UYGULAMASI: TÜM oyuncuları tpids2[] içine al
+    const allPlayerKeys = [...offeredPlayerKeys, ...requestedPlayerKeys];
+
+    allPlayerKeys.forEach(key => {
         queryString += `&tpids2[]=${getIntId(key)}`;
     });
 
-    // Loop through requested players (Target/Team2)
-    requestedPlayerKeys.forEach(key => {
-        queryString += `&tpids2[]=${getIntId(key)}`;
-    });
-
-    const finalUrl = baseUrl + queryString;
-    console.log("[Trade Debug] Final Generated URL:", finalUrl);
-    return finalUrl;
+    console.log(`%c[BROWSER] FINAL URL (tpids2-only): ${baseUrl + queryString}`, "color: blue; font-weight: bold;");
+    return baseUrl + queryString;
 }
 
