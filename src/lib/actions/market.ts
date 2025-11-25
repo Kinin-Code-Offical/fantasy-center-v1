@@ -7,6 +7,8 @@ import { revalidatePath } from "next/cache";
 import { createNotification } from "@/lib/actions/notifications";
 import { assertVerified } from "@/lib/auth/guard";
 import { logTransaction, logTrade } from "@/lib/logger";
+import { getValidYahooToken } from "@/lib/auth-helpers";
+import { getTradeRedirectUrl } from "@/lib/trade-url-helper";
 
 export async function createListing(playerId: string, notes: string) {
     await assertVerified();
@@ -93,24 +95,67 @@ export async function makeOffer(listingId: string, offeredPlayerId: string, cred
         throw new Error("You cannot make an offer on your own listing.");
     }
 
-    // Verify ownership of offered player
-    if (offeredPlayerId) {
-        const userTeams = await prisma.team.findMany({
-            where: { managerId: userId },
-            include: { players: true }
-        });
-        const ownsPlayer = userTeams.some(team => team.players.some(p => p.id === offeredPlayerId));
-        if (!ownsPlayer) {
-            throw new Error("You do not own the player you are offering.");
+    // 1. Identify Context (League & Teams) for Yahoo Sync
+    const sellerTeams = await prisma.team.findMany({
+        where: {
+            managerId: listing.sellerId,
+            players: { some: { id: listing.playerId } }
+        },
+        include: {
+            league: {
+                include: { game: true }
+            }
+        }
+    });
+
+    const offererTeams = await prisma.team.findMany({
+        where: {
+            managerId: userId,
+            leagueId: { in: sellerTeams.map(t => t.leagueId) }
+        },
+        include: { league: true }
+    });
+
+    let targetLeague = null;
+    let sellerTeam = null;
+    let offererTeam = null;
+
+    for (const sTeam of sellerTeams) {
+        const oTeam = offererTeams.find(t => t.leagueId === sTeam.leagueId);
+        if (oTeam) {
+            // If offering a player, ensure ownership in this specific league
+            if (offeredPlayerId) {
+                const ownsOffered = await prisma.team.findFirst({
+                    where: {
+                        id: oTeam.id,
+                        players: { some: { id: offeredPlayerId } }
+                    }
+                });
+                if (!ownsOffered) continue;
+            }
+
+            targetLeague = sTeam.league;
+            sellerTeam = sTeam;
+            offererTeam = oTeam;
+            break;
         }
     }
 
-    // Verify credits
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    // if (!user || user.credits < credits) {
-    //     throw new Error("Insufficient credits.");
-    // }
+    if (!targetLeague || !sellerTeam || !offererTeam) {
+        throw new Error("Could not find a matching Yahoo league context for this trade.");
+    }
 
+    // 2. Generate Yahoo Redirect URL (Read-Only Mode)
+    const leagueKey = targetLeague.yahooLeagueKey;
+    const sourceTeamKey = offererTeam.yahooTeamKey;
+    const targetTeamKey = sellerTeam.yahooTeamKey;
+
+    const offeredPlayerKeys = offeredPlayerId ? [offeredPlayerId] : [];
+    const requestedPlayerKeys = [listing.playerId];
+
+    const redirectUrl = getTradeRedirectUrl(targetLeague.game.code, leagueKey, sourceTeamKey, targetTeamKey, offeredPlayerKeys, requestedPlayerKeys);
+
+    // 3. Create Internal Offer
     await prisma.tradeOffer.create({
         data: {
             listingId: listingId,
@@ -131,7 +176,7 @@ export async function makeOffer(listingId: string, offeredPlayerId: string, cred
     );
 
     revalidatePath("/market");
-    return { success: true };
+    return { success: true, redirectUrl };
 }
 
 export async function acceptOffer(offerId: string) {
@@ -152,6 +197,46 @@ export async function acceptOffer(offerId: string) {
     if (offer.listing.sellerId !== userId) throw new Error("Unauthorized.");
     if (offer.listing.status !== "ACTIVE") throw new Error("Listing is no longer active.");
 
+    // Yahoo Sync
+    // Read-Only Mode: We cannot accept on Yahoo via API.
+    // User must accept manually on Yahoo.
+    // We will return a redirect URL if possible, or just instruct the user.
+
+    let redirectUrl = null;
+    try {
+        const sellerTeams = await prisma.team.findMany({
+            where: { managerId: userId, players: { some: { id: offer.listing.playerId } } },
+            include: {
+                league: {
+                    include: { game: true }
+                }
+            }
+        });
+        const offererTeams = await prisma.team.findMany({
+            where: { managerId: offer.offererId }
+        });
+
+        for (const sTeam of sellerTeams) {
+            const oTeam = offererTeams.find(t => t.leagueId === sTeam.leagueId);
+            if (oTeam) {
+                const gameCode = sTeam.league.game?.code || "nfl";
+                const leagueId = sTeam.league.yahooLeagueKey.split('.').pop();
+                redirectUrl = `https://${gameCode}.fantasysports.yahoo.com/${gameCode}/${leagueId}/transactions`;
+                break;
+            }
+        }
+    } catch (error) {
+        console.warn("[Yahoo Sync] Failed to generate redirect URL.", error);
+    }
+
+    if (redirectUrl) {
+        return { success: true, message: "Please accept this trade on Yahoo directly.", redirectUrl };
+    }
+
+    return { success: false, message: "Could not determine Yahoo league context. Please accept on Yahoo manually.", redirectUrl: undefined };
+
+    /*
+    // DEPRECATED: Local execution is disabled in favor of Sync-Only flow.
     // Transaction
     await prisma.$transaction(async (tx) => {
         // 1. Validate & Fetch
@@ -288,9 +373,8 @@ export async function acceptOffer(offerId: string) {
 
     revalidatePath("/market");
     return { success: true, message: "Transaction Complete" };
-}
-
-export async function rejectOffer(offerId: string) {
+    */
+} export async function rejectOffer(offerId: string) {
     const session = await getServerSession(authOptions);
     if (!session?.user) return { success: false, message: "Unauthorized" };
     const userId = (session.user as any).id;
@@ -300,11 +384,31 @@ export async function rejectOffer(offerId: string) {
         include: { listing: true }
     });
 
-    if (!offer) return { success: false, message: "Offer not found" };
-    
-    // Only the seller can reject
-    if (offer.listing.sellerId !== userId) {
-        return { success: false, message: "Permission Denied" };
+    if (!offer) throw new Error("Offer not found.");
+    if (offer.listing.sellerId !== userId) throw new Error("Unauthorized.");
+
+    // Yahoo Sync: Redirect URL
+    let redirectUrl = null;
+    try {
+        const sellerTeam = await prisma.team.findFirst({
+            where: {
+                managerId: userId,
+                players: { some: { id: offer.listing.playerId } }
+            },
+            include: {
+                league: {
+                    include: { game: true }
+                }
+            }
+        });
+
+        if (sellerTeam) {
+            const gameCode = sellerTeam.league.game?.code || "nfl";
+            const leagueId = sellerTeam.league.yahooLeagueKey.split('.').pop();
+            redirectUrl = `https://${gameCode}.fantasysports.yahoo.com/${gameCode}/${leagueId}/transactions`;
+        }
+    } catch (error) {
+        console.warn("[Yahoo Sync] Failed to generate redirect URL for reject.", error);
     }
 
     await prisma.tradeOffer.update({
@@ -314,7 +418,7 @@ export async function rejectOffer(offerId: string) {
 
     revalidatePath("/market");
     revalidatePath("/trades");
-    return { success: true };
+    return { success: true, redirectUrl };
 }
 
 export async function cancelOffer(offerId: string) {
@@ -323,11 +427,37 @@ export async function cancelOffer(offerId: string) {
     const userId = (session.user as any).id;
 
     const offer = await prisma.tradeOffer.findUnique({
-        where: { id: offerId }
+        where: { id: offerId },
+        include: { listing: true }
     });
 
     if (!offer || offer.offererId !== userId) {
         return { success: false, message: "Permission Denied" };
+    }
+
+    // Yahoo Sync: Redirect URL
+    let redirectUrl = null;
+    try {
+        // Find the league context via the seller's team (since they own the listed player)
+        const sellerTeam = await prisma.team.findFirst({
+            where: {
+                managerId: offer.listing.sellerId,
+                players: { some: { id: offer.listing.playerId } }
+            },
+            include: {
+                league: {
+                    include: { game: true }
+                }
+            }
+        });
+
+        if (sellerTeam) {
+            const gameCode = sellerTeam.league.game?.code || "nfl";
+            const leagueId = sellerTeam.league.yahooLeagueKey.split('.').pop();
+            redirectUrl = `https://${gameCode}.fantasysports.yahoo.com/${gameCode}/${leagueId}/transactions`;
+        }
+    } catch (error) {
+        console.warn("[Yahoo Sync] Failed to generate redirect URL for cancel.", error);
     }
 
     await prisma.tradeOffer.update({
@@ -337,7 +467,7 @@ export async function cancelOffer(offerId: string) {
 
     revalidatePath("/market");
     revalidatePath("/trades");
-    return { success: true };
+    return { success: true, redirectUrl };
 }
 
 export async function getOffersForListing(listingId: string) {
@@ -404,7 +534,12 @@ export async function makeDirectOffer(targetPlayerId: string, offeredPlayerId: s
         include: {
             teams: {
                 where: { leagueId: leagueId },
-                include: { manager: true }
+                include: {
+                    manager: true,
+                    league: {
+                        include: { game: true }
+                    }
+                }
             }
         }
     });
@@ -460,7 +595,27 @@ export async function makeDirectOffer(targetPlayerId: string, offeredPlayerId: s
         `/market/${listing.id}` // Or wherever they should view it. Maybe /trades?
     );
 
+    // 6. Generate Redirect URL
+    const targetLeague = targetTeam.league || await prisma.league.findUnique({ where: { id: leagueId }, include: { game: true } });
+
+    const offererTeam = await prisma.team.findFirst({
+        where: { managerId: userId, leagueId: leagueId }
+    });
+
+    if (!offererTeam) {
+        throw new Error("You must have a team in this league to trade.");
+    }
+
+    const leagueKey = targetLeague.yahooLeagueKey;
+    const sourceTeamKey = offererTeam.yahooTeamKey;
+    const targetTeamKey = targetTeam.yahooTeamKey;
+
+    const offeredPlayerKeys = offeredPlayerId ? [offeredPlayerId] : [];
+    const requestedPlayerKeys = [targetPlayerId];
+
+    const redirectUrl = getTradeRedirectUrl(targetLeague.game.code, leagueKey, sourceTeamKey, targetTeamKey, offeredPlayerKeys, requestedPlayerKeys);
+
     revalidatePath("/market");
     revalidatePath("/trades");
-    return { success: true, listingId: listing.id };
+    return { success: true, listingId: listing.id, redirectUrl };
 }

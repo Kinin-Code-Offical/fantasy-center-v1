@@ -27,6 +27,7 @@ export async function updateUserProfile(formData: FormData) {
     const currentPassword = formData.get("currentPassword") as string;
     const newPassword = formData.get("newPassword") as string;
     const confirmPassword = formData.get("confirmPassword") as string;
+    const securityCode = formData.get("securityCode") as string;
 
     // Basic validation
     if (username) {
@@ -89,8 +90,8 @@ export async function updateUserProfile(formData: FormData) {
             });
 
             const verificationToken = await generateVerificationToken(email);
-            await sendVerificationEmail(verificationToken.email, verificationToken.token);
-            
+            await sendVerificationEmail(verificationToken.email, verificationToken.token, securityCode);
+
             emailUpdateMessage = `Verification link sent to ${email}. Please confirm to update.`;
         }
 
@@ -114,7 +115,7 @@ export async function updateUserProfile(formData: FormData) {
                     return { success: false, message: "Incorrect current password." };
                 }
             }
-            
+
             hashedPassword = await hash(newPassword, 10);
         }
 
@@ -135,10 +136,10 @@ export async function updateUserProfile(formData: FormData) {
 
         revalidatePath(`/user/${username || user.username}`);
         revalidatePath("/settings");
-        
-        return { 
-            success: true, 
-            message: emailUpdateMessage ? `Profile updated. ${emailUpdateMessage}` : "Profile updated successfully." 
+
+        return {
+            success: true,
+            message: emailUpdateMessage ? `Profile updated. ${emailUpdateMessage}` : "Profile updated successfully."
         };
 
     } catch (error) {

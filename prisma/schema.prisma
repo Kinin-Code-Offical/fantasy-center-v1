@@ -502,6 +502,8 @@ model TradeOffer {
   id          String   @id @default(cuid())
   status      String   @default("PENDING") // PENDING, ACCEPTED, REJECTED
   createdAt   DateTime @default(now())
+  
+  yahooTransactionId String? // Stores the Yahoo Transaction Key (e.g. 441.l.123.tr.45)
 
   // Who is offering?
   listingId   String

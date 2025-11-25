@@ -61,14 +61,16 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
             currentUserId = user.id;
             userLeagueIds = user.teams.map(t => t.leagueId);
             userLeagues = user.teams.map(t => ({ id: t.league.id, name: t.league.name }));
-            
+
             // Flatten players from all teams and attach league info
-            userPlayers = user.teams.flatMap(team => 
+            userPlayers = user.teams.flatMap(team =>
                 team.players.map(player => ({
                     ...player,
+                    teamKey: team.yahooTeamKey,
                     league: {
                         id: team.league.id,
-                        name: team.league.name
+                        name: team.league.name,
+                        leagueKey: team.league.yahooLeagueKey
                     }
                 }))
             );

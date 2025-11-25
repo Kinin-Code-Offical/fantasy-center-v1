@@ -22,6 +22,7 @@ export async function registerUser(prevState: RegisterState, formData: FormData)
     const lastName = formData.get("lastName") as string;
     const username = formData.get("username") as string;
     const birthDateStr = formData.get("birthDate") as string;
+    const securityCode = formData.get("securityCode") as string;
 
     if (!email || !password || !confirmPassword || !firstName || !lastName || !username || !birthDateStr) {
         return { error: "Lütfen tüm alanları doldurun." };
@@ -77,7 +78,7 @@ export async function registerUser(prevState: RegisterState, formData: FormData)
         });
 
         const verificationToken = await generateVerificationToken(email);
-        await sendVerificationEmail(verificationToken.email, verificationToken.token);
+        await sendVerificationEmail(verificationToken.email, verificationToken.token, securityCode);
 
         return { success: true, message: "Confirmation email sent." };
     } catch (error) {

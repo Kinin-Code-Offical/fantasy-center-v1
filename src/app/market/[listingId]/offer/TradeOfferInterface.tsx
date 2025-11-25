@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { makeOffer } from "@/lib/actions/market";
+import { syncLeagueTrades } from "@/lib/actions/trade-actions";
 import { formatCurrency } from "@/lib/format";
 import CyberBackground from "@/components/CyberBackground";
 import BackButton from "@/components/BackButton";
@@ -14,6 +15,8 @@ interface Props {
     userPlayers: any[];
     currentUserId: string;
     leagueName?: string;
+    leagueId?: string;
+    yahooLeagueKey?: string;
 }
 
 // Helper for Typewriter Effect
@@ -39,7 +42,7 @@ const TypewriterText = ({ text, delay = 0 }: { text: string, delay?: number }) =
     return <span>{displayedText}</span>;
 };
 
-export default function TradeOfferInterface({ listing, userPlayers, currentUserId, leagueName }: Props) {
+export default function TradeOfferInterface({ listing, userPlayers, currentUserId, leagueName, leagueId, yahooLeagueKey }: Props) {
     const router = useRouter();
     const { showToast } = useToast();
     const [selectedPlayerId, setSelectedPlayerId] = useState<string>("");
@@ -87,9 +90,33 @@ export default function TradeOfferInterface({ listing, userPlayers, currentUserI
         // Sound Effect: Play 'Submit_Initiated.wav'
         setIsSubmitting(true);
         try {
-            await makeOffer(listing.id, selectedPlayerId, credits);
+            const result = await makeOffer(listing.id, selectedPlayerId, credits);
+
+            if (result.redirectUrl) {
+                showToast("REDIRECTING TO YAHOO FOR CONFIRMATION", "success");
+                window.open(result.redirectUrl, "_blank");
+
+                // Polling Mechanism
+                if (leagueId && yahooLeagueKey) {
+                    showToast("SYNCING WITH YAHOO... PLEASE WAIT", "info");
+                    setTimeout(async () => {
+                        try {
+                            await syncLeagueTrades(leagueId, yahooLeagueKey);
+                            showToast("SYNC COMPLETE - UPDATING UI", "success");
+                            router.push("/market");
+                            router.refresh();
+                        } catch (syncError) {
+                            console.error("Sync failed:", syncError);
+                            showToast("AUTO-SYNC FAILED - PLEASE REFRESH MANUALLY", "error");
+                        }
+                    }, 15000); // 15 seconds delay
+                    return; // Don't redirect immediately, wait for sync
+                }
+            } else {
+                showToast("OFFER TRANSMITTED SUCCESSFULLY", "success");
+            }
+
             // Sound Effect: Play 'Transaction_Complete.wav'
-            showToast("OFFER TRANSMITTED SUCCESSFULLY", "success");
             router.push("/market");
             router.refresh();
         } catch (error) {
@@ -97,7 +124,12 @@ export default function TradeOfferInterface({ listing, userPlayers, currentUserI
             // Sound Effect: Play 'Error_Alert.wav'
             showToast("TRANSMISSION FAILED: " + (error instanceof Error ? error.message : "Unknown Error"), "error");
         } finally {
-            setIsSubmitting(false);
+            if (!leagueId || !yahooLeagueKey) {
+                setIsSubmitting(false);
+            }
+            // If polling, we keep isSubmitting true to show loading state? 
+            // Or maybe we should set it to false but show a different loading state.
+            // For now, let's keep it simple.
         }
     };
 

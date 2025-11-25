@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { makeDirectOffer } from "@/lib/actions/market";
+import { syncLeagueTrades } from "@/lib/actions/trade-actions";
 import { formatCurrency } from "@/lib/format";
 import CyberBackground from "@/components/CyberBackground";
 import BackButton from "@/components/BackButton";
@@ -15,6 +16,7 @@ interface Props {
     userPlayers: any[];
     currentUserId: string;
     leagueId: string;
+    yahooLeagueKey?: string;
 }
 
 // Helper for Typewriter Effect
@@ -40,7 +42,7 @@ const TypewriterText = ({ text, delay = 0 }: { text: string, delay?: number }) =
     return <span>{displayedText}</span>;
 };
 
-export default function DirectTradeConsole({ targetPlayer, targetTeam, userPlayers, currentUserId, leagueId }: Props) {
+export default function DirectTradeConsole({ targetPlayer, targetTeam, userPlayers, currentUserId, leagueId, yahooLeagueKey }: Props) {
     const router = useRouter();
     const { showToast } = useToast();
     const [selectedPlayerId, setSelectedPlayerId] = useState<string>("");
@@ -61,7 +63,7 @@ export default function DirectTradeConsole({ targetPlayer, targetTeam, userPlaye
         const outgoingPlayerValue = selectedPlayer?.marketValue || 0;
         const outgoingTotal = outgoingPlayerValue + credits;
         const netValue = incomingValue - outgoingTotal;
-        
+
         let status = "BALANCED EXCHANGE";
         let color = "text-blue-400";
         let statusColor = "bg-blue-500/10 border-blue-500 text-blue-400";
@@ -86,15 +88,41 @@ export default function DirectTradeConsole({ targetPlayer, targetTeam, userPlaye
     const handleSubmit = async () => {
         setIsSubmitting(true);
         try {
-            await makeDirectOffer(targetPlayer.id, selectedPlayerId, credits, leagueId);
-            showToast("DIRECT OFFER TRANSMITTED SUCCESSFULLY", "success");
+            const result = await makeDirectOffer(targetPlayer.id, selectedPlayerId, credits, leagueId);
+
+            if (result.redirectUrl) {
+                showToast("REDIRECTING TO YAHOO FOR CONFIRMATION", "success");
+                window.open(result.redirectUrl, "_blank");
+
+                // Polling Mechanism
+                if (yahooLeagueKey) {
+                    showToast("SYNCING WITH YAHOO... PLEASE WAIT", "info");
+                    setTimeout(async () => {
+                        try {
+                            await syncLeagueTrades(leagueId, yahooLeagueKey);
+                            showToast("SYNC COMPLETE - UPDATING UI", "success");
+                            router.push("/trades");
+                            router.refresh();
+                        } catch (syncError) {
+                            console.error("Sync failed:", syncError);
+                            showToast("AUTO-SYNC FAILED - PLEASE REFRESH MANUALLY", "error");
+                        }
+                    }, 15000); // 15 seconds delay
+                    return; // Don't redirect immediately
+                }
+            } else {
+                showToast("DIRECT OFFER TRANSMITTED SUCCESSFULLY", "success");
+            }
+
             router.push("/trades"); // Redirect to trades list
             router.refresh();
         } catch (error) {
             console.error(error);
             showToast("TRANSMISSION FAILED: " + (error instanceof Error ? error.message : "Unknown Error"), "error");
         } finally {
-            setIsSubmitting(false);
+            if (!yahooLeagueKey) {
+                setIsSubmitting(false);
+            }
         }
     };
 

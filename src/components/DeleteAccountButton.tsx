@@ -36,12 +36,14 @@ export default function DeleteAccountButton() {
 
                         <div className="flex gap-3">
                             <button
+                                type="button"
                                 onClick={() => setShowConfirm(false)}
                                 className="flex-1 py-3 bg-gray-800 hover:bg-gray-700 text-white rounded-lg font-bold text-sm transition-colors uppercase tracking-wide"
                             >
                                 Cancel
                             </button>
                             <button
+                                type="button"
                                 onClick={handleDelete}
                                 disabled={isDeleting}
                                 className="flex-1 py-3 bg-red-600 hover:bg-red-500 text-white rounded-lg font-bold text-sm transition-colors shadow-[0_0_15px_rgba(220,38,38,0.4)] uppercase tracking-wide disabled:opacity-50"
@@ -57,6 +59,7 @@ export default function DeleteAccountButton() {
 
     return (
         <button
+            type="button"
             onClick={() => setShowConfirm(true)}
             className="flex items-center gap-2 text-red-500 hover:text-red-400 transition-colors font-bold text-sm uppercase tracking-wider group"
         >

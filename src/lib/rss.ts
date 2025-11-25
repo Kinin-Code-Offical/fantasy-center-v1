@@ -34,7 +34,16 @@ export async function fetchAndProcessNews(priorityPlayers: Player[]) {
 
     // Create a single Regex to scan text: /luka doncic|lebron james|.../gi
     const playerRegex = new RegExp(validNames.join("|"), "gi");
-    const upsertPromises: Promise<any>[] = [];
+
+    // Store data first, then batch write
+    const newsItemsToUpsert: Array<{
+        playerId: string;
+        headline: string;
+        content: string;
+        url: string;
+        source: string;
+        publishedAt: Date;
+    }> = [];
 
     for (const feedUrl of RSS_FEEDS) {
         try {
@@ -59,26 +68,14 @@ export async function fetchAndProcessNews(priorityPlayers: Player[]) {
                     for (const name of uniqueNames) {
                         const playerId = playerMap.get(name);
                         if (playerId) {
-                            // Add to batch
-                            upsertPromises.push(
-                                prisma.playerNews.upsert({
-                                    where: {
-                                        playerId_headline: {
-                                            playerId: playerId,
-                                            headline: title
-                                        }
-                                    },
-                                    update: {},
-                                    create: {
-                                        playerId: playerId,
-                                        headline: title,
-                                        content: content,
-                                        url: item.link || '',
-                                        source: feed.title || 'RSS Feed',
-                                        publishedAt: item.pubDate ? new Date(item.pubDate) : new Date(),
-                                    }
-                                }).catch(err => console.error(`[RSS] Error saving news for ${name}:`, err))
-                            );
+                            newsItemsToUpsert.push({
+                                playerId,
+                                headline: title,
+                                content: content,
+                                url: item.link || '',
+                                source: feed.title || 'RSS Feed',
+                                publishedAt: item.pubDate ? new Date(item.pubDate) : new Date(),
+                            });
                             totalMatched++;
                         }
                     }
@@ -91,9 +88,25 @@ export async function fetchAndProcessNews(priorityPlayers: Player[]) {
     }
 
     // 3. Batch Write
-    if (upsertPromises.length > 0) {
-        console.log(`[RSS] Executing ${upsertPromises.length} DB operations in parallel...`);
-        await Promise.all(upsertPromises);
+    if (newsItemsToUpsert.length > 0) {
+        console.log(`[RSS] Executing ${newsItemsToUpsert.length} DB operations in batches...`);
+
+        const BATCH_SIZE = 5;
+        for (let i = 0; i < newsItemsToUpsert.length; i += BATCH_SIZE) {
+            const batch = newsItemsToUpsert.slice(i, i + BATCH_SIZE);
+            await Promise.all(batch.map(item =>
+                prisma.playerNews.upsert({
+                    where: {
+                        playerId_headline: {
+                            playerId: item.playerId,
+                            headline: item.headline
+                        }
+                    },
+                    update: {},
+                    create: item
+                }).catch(err => console.error(`[RSS] Error saving news for ${item.playerId}:`, err))
+            ));
+        }
     }
 
     console.log(`[RSS] Finished. Processed ${totalProcessed} items. Matched ${totalMatched} news entries.`);

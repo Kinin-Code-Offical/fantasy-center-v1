@@ -38,6 +38,7 @@ export default async function OfferPage({ params }: PageProps) {
     const sellerTeam = listing.player.teams.find((t: any) => t.managerId === listing.sellerId);
     const targetLeagueId = sellerTeam?.leagueId;
     const targetLeagueName = sellerTeam?.league.name;
+    const targetYahooLeagueKey = sellerTeam?.league.yahooLeagueKey;
 
     const user = await prisma.user.findUnique({
         where: { email: session.user.email },
@@ -67,6 +68,8 @@ export default async function OfferPage({ params }: PageProps) {
             userPlayers={validUserPlayers}
             currentUserId={user.id}
             leagueName={targetLeagueName}
+            leagueId={targetLeagueId}
+            yahooLeagueKey={targetYahooLeagueKey}
         />
     );
 }

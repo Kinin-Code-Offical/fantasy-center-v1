@@ -61,8 +61,8 @@ export default async function NewTradePage({ searchParams }: PageProps) {
 
     // Filter user players to only those in the same league
     const validUserPlayers = user.teams
-            .filter(t => t.leagueId === leagueId)
-            .flatMap(t => t.players);
+        .filter(t => t.leagueId === leagueId)
+        .flatMap(t => t.players);
 
     return (
         <DirectTradeConsole
@@ -71,6 +71,7 @@ export default async function NewTradePage({ searchParams }: PageProps) {
             userPlayers={validUserPlayers}
             currentUserId={user.id}
             leagueId={leagueId}
+            yahooLeagueKey={targetTeam.league.yahooLeagueKey}
         />
     );
 }

@@ -1,4 +1,6 @@
 import nodemailer from "nodemailer";
+import { render } from "@react-email/render";
+import VerifyEmail from "@/components/emails/VerifyEmail";
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
@@ -10,29 +12,18 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-export const sendVerificationEmail = async (email: string, token: string) => {
+export const sendVerificationEmail = async (email: string, token: string, securityCode?: string) => {
   const confirmLink = `${process.env.NEXT_PUBLIC_APP_URL}/auth/new-verification?token=${token}`;
 
-  const html = `
-    <body style="background-color: #000; color: #0f0; font-family: 'Courier New', Courier, monospace; padding: 20px;">
-      <div style="max-width: 600px; margin: 0 auto; border: 1px solid #0f0; padding: 20px; box-shadow: 0 0 10px #0f0;">
-        <h1 style="text-align: center; border-bottom: 1px solid #0f0; padding-bottom: 10px;">CONFIRM IDENTITY // TRADE CENTER</h1>
-        <p style="font-size: 16px;">SYSTEM ALERT: NEW USER REGISTRATION DETECTED.</p>
-        <p>INITIATING VERIFICATION PROTOCOL...</p>
-        <p>TARGET: ${email}</p>
-        <p>ACTION REQUIRED: CLICK THE LINK BELOW TO VERIFY YOUR ENCRYPTION KEY.</p>
-        <div style="text-align: center; margin: 30px 0;">
-          <a href="${confirmLink}" style="background-color: #000; color: #0f0; border: 1px solid #0f0; padding: 15px 30px; text-decoration: none; font-weight: bold; display: inline-block; transition: all 0.3s;">VERIFY IDENTITY</a>
-        </div>
-        <p style="font-size: 12px; opacity: 0.7;">SECURE CONNECTION ESTABLISHED. END OF TRANSMISSION.</p>
-      </div>
-    </body>
-  `;
+  // Use provided security code or generate a random one if not provided
+  const code = securityCode || Math.random().toString(36).substring(2, 8).toUpperCase();
+
+  const emailHtml = await render(VerifyEmail({ confirmLink, email, securityCode: code }));
 
   await transporter.sendMail({
     from: '"Trade Center Security" <security@tradecenter.com>',
     to: email,
     subject: "CONFIRM IDENTITY // TRADE CENTER",
-    html,
+    html: emailHtml,
   });
 };

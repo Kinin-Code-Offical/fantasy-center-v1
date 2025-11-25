@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import Image from "next/image";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import DeleteAccountButton from "@/components/DeleteAccountButton";
 import { Settings, UserPlus, MessageSquare, ShieldAlert, ArrowLeft, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import BackButton from "@/components/BackButton";
@@ -129,7 +128,7 @@ export default async function UserProfilePage({ params }: PageProps) {
                             <div className="text-center md:text-left space-y-2 w-full md:w-auto">
                                 <h1 className="text-3xl md:text-5xl font-black text-white tracking-tighter uppercase flex flex-col md:flex-row items-center gap-2 md:gap-4 justify-center md:justify-start">
                                     {user.username}
-                                    
+
                                     {/* Verification Badge */}
                                     {user.emailVerified ? (
                                         <div className="flex items-center gap-1 px-2 py-0.5 bg-green-500/20 border border-green-500/50 rounded text-[10px] text-green-400 font-mono tracking-widest" title="Verified Identity">
@@ -261,7 +260,7 @@ export default async function UserProfilePage({ params }: PageProps) {
 
                         {/* Activity Column */}
                         <div className="flex flex-col divide-y divide-white/10 bg-black/20">
-                            
+
                             {/* Wallet Activity */}
                             <div className="p-4 md:p-6">
                                 <div className="flex items-center justify-between mb-6">
@@ -328,22 +327,6 @@ export default async function UserProfilePage({ params }: PageProps) {
                         </div>
 
                     </div>
-
-                    {/* Danger Zone (Owner Only) */}
-                    {isOwner && (
-                        <div className="p-8 border-t border-red-500/20 bg-red-950/10">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <h3 className="text-red-500 font-bold uppercase tracking-widest flex items-center gap-2">
-                                        <ShieldAlert size={18} />
-                                        Danger Zone
-                                    </h3>
-                                    <p className="text-red-400/50 text-xs font-mono mt-1">IRREVERSIBLE ACTIONS</p>
-                                </div>
-                                <DeleteAccountButton />
-                            </div>
-                        </div>
-                    )}
                 </div>
             </div>
         </div>

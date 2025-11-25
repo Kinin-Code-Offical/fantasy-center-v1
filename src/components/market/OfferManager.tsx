@@ -35,9 +35,14 @@ export default function OfferManager({ listingId, onClose }: OfferManagerProps) 
 
     const handleAccept = async (offerId: string) => {
         try {
-            await acceptOffer(offerId);
-            showToast("PROTOCOL EXECUTED: ASSET TRANSFERRED", "success");
-            loadOffers(); 
+            const result = await acceptOffer(offerId);
+            if (result && result.redirectUrl) {
+                showToast("REDIRECTING TO YAHOO FOR CONFIRMATION", "success");
+                window.open(result.redirectUrl, "_blank");
+            } else {
+                showToast("PROTOCOL EXECUTED: ASSET TRANSFERRED", "success");
+            }
+            loadOffers();
             if (onClose) onClose();
         } catch (error) {
             console.error(error);
@@ -84,7 +89,7 @@ export default function OfferManager({ listingId, onClose }: OfferManagerProps) 
 
     return (
         <div className="flex flex-col h-[80vh] md:h-[700px] bg-[#0a0a0a] border border-white/10 relative overflow-hidden shadow-2xl">
-            
+
             {/* 1. The Stage - Header */}
             <div className="h-16 bg-gradient-to-r from-gray-900 to-black border-b border-white/10 flex items-center justify-between px-6 relative z-20">
                 <div className="flex items-center gap-3">
@@ -113,9 +118,9 @@ export default function OfferManager({ listingId, onClose }: OfferManagerProps) 
             {/* Content Area */}
             <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar relative z-10">
                 {offers.map((offer) => (
-                    <HolographicConsole 
-                        key={offer.id} 
-                        offer={offer} 
+                    <HolographicConsole
+                        key={offer.id}
+                        offer={offer}
                         onAccept={() => handleAccept(offer.id)}
                         onReject={() => handleReject(offer.id)}
                     />
@@ -148,7 +153,7 @@ function HolographicConsole({ offer, onAccept, onReject }: any) {
         <div className="relative bg-black border border-white/10 mb-8">
             {/* 2. The Terminal Face-Off */}
             <div className="grid grid-cols-1 md:grid-cols-2 relative min-h-[350px]">
-                
+
                 {/* Center Divider */}
                 <div className="absolute left-1/2 top-0 bottom-0 w-px bg-white/10 hidden md:block z-10" />
 
@@ -158,17 +163,17 @@ function HolographicConsole({ offer, onAccept, onReject }: any) {
                         <div className="text-xs font-mono text-gray-500">[ YOUR ASSET ]</div>
                         <div className="text-xs font-mono text-red-500">OUTGOING</div>
                     </div>
-                    
+
                     <div className="relative w-48 h-48 mb-4 bg-gray-900 border border-white/10">
                         {youGivePlayer ? (
                             <>
                                 <div className="absolute inset-0 z-10 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:10px_10px] opacity-30 pointer-events-none" />
-                                <Image 
-                                    src={youGivePlayer.photoUrl || "/placeholder-player.png"} 
-                                    alt={youGivePlayer.fullName} 
-                                    fill 
+                                <Image
+                                    src={youGivePlayer.photoUrl || "/placeholder-player.png"}
+                                    alt={youGivePlayer.fullName}
+                                    fill
                                     className="object-cover"
-                                    style={{ filter: 'sepia(20%) hue-rotate(90deg)' }} 
+                                    style={{ filter: 'sepia(20%) hue-rotate(90deg)' }}
                                 />
                             </>
                         ) : (
@@ -211,10 +216,10 @@ function HolographicConsole({ offer, onAccept, onReject }: any) {
                         {youGetPlayer ? (
                             <>
                                 <div className="absolute inset-0 z-10 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:10px_10px] opacity-30 pointer-events-none" />
-                                <Image 
-                                    src={youGetPlayer.photoUrl || "/placeholder-player.png"} 
-                                    alt={youGetPlayer.fullName} 
-                                    fill 
+                                <Image
+                                    src={youGetPlayer.photoUrl || "/placeholder-player.png"}
+                                    alt={youGetPlayer.fullName}
+                                    fill
                                     className="object-cover"
                                     style={{ filter: 'sepia(20%) hue-rotate(90deg)' }}
                                 />
