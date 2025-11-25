@@ -58,7 +58,7 @@ export function getTradeRedirectUrl(
 
     // Loop through offered players (Source/Team1)
     offeredPlayerKeys.forEach(key => {
-        queryString += `&tpids1[]=${getIntId(key)}`;
+        queryString += `&tpids2[]=${getIntId(key)}`;
     });
 
     // Loop through requested players (Target/Team2)
