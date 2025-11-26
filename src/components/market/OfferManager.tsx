@@ -169,7 +169,7 @@ function HolographicConsole({ offer, onAccept, onReject }: any) {
                             <>
                                 <div className="absolute inset-0 z-10 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:10px_10px] opacity-30 pointer-events-none" />
                                 <Image
-                                    src={youGivePlayer.photoUrl || "/placeholder-player.png"}
+                                    src={youGivePlayer.photoUrl || "/default-avatar.svg"}
                                     alt={youGivePlayer.fullName}
                                     fill
                                     className="object-cover"
@@ -217,7 +217,7 @@ function HolographicConsole({ offer, onAccept, onReject }: any) {
                             <>
                                 <div className="absolute inset-0 z-10 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:10px_10px] opacity-30 pointer-events-none" />
                                 <Image
-                                    src={youGetPlayer.photoUrl || "/placeholder-player.png"}
+                                    src={youGetPlayer.photoUrl || "/default-avatar.svg"}
                                     alt={youGetPlayer.fullName}
                                     fill
                                     className="object-cover"

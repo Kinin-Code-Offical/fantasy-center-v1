@@ -15,7 +15,7 @@ export default function CreateListingModal({ userPlayers, activeListingPlayerIds
     const [selectedPlayerId, setSelectedPlayerId] = useState<string>("");
     const [notes, setNotes] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
-    
+
     // New State for Redesign
     const [activeLeagueId, setActiveLeagueId] = useState<string>("");
     const [searchQuery, setSearchQuery] = useState("");
@@ -99,11 +99,10 @@ export default function CreateListingModal({ userPlayers, activeListingPlayerIds
                             <button
                                 key={league.id}
                                 onClick={() => setActiveLeagueId(league.id)}
-                                className={`snap-start px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap rounded transition-all ${
-                                    activeLeagueId === league.id
+                                className={`snap-start px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap rounded transition-all ${activeLeagueId === league.id
                                         ? "bg-green-500 text-black shadow-[0_0_10px_rgba(34,197,94,0.4)]"
                                         : "border border-green-500/30 text-gray-400 hover:text-white hover:border-green-500/60"
-                                }`}
+                                    }`}
                             >
                                 {league.name}
                             </button>
@@ -114,7 +113,7 @@ export default function CreateListingModal({ userPlayers, activeListingPlayerIds
                     <div className="p-3 border-b border-white/10 bg-white/5">
                         <div className="relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-500" />
-                            <input 
+                            <input
                                 type="text"
                                 placeholder="Filter inventory..."
                                 value={searchQuery}
@@ -131,7 +130,7 @@ export default function CreateListingModal({ userPlayers, activeListingPlayerIds
                                 const isListed = activeListingPlayerIds.includes(p.id);
                                 const uniqueKey = `${p.id}-${p.league?.id}`;
                                 const isSelected = selectedPlayerId === p.id;
-                                
+
                                 return (
                                     <button
                                         key={uniqueKey}
@@ -155,11 +154,11 @@ export default function CreateListingModal({ userPlayers, activeListingPlayerIds
                                         {/* Avatar */}
                                         <div className="relative flex-shrink-0">
                                             <div className={`w-12 h-12 rounded bg-black/20 border ${isSelected ? "border-black/20" : "border-white/10"} flex items-center justify-center overflow-hidden`}>
-                                                {p.photoUrl ? (
-                                                    <img src={p.photoUrl} alt={p.fullName} className="w-full h-full object-cover" />
-                                                ) : (
-                                                    <span className={`text-xs font-bold ${isSelected ? "text-black" : "text-gray-600"}`}>{p.primaryPos || "P"}</span>
-                                                )}
+                                                <img
+                                                    src={p.photoUrl || "/default-avatar.svg"}
+                                                    alt={p.fullName}
+                                                    className="w-full h-full object-cover"
+                                                />
                                             </div>
                                         </div>
 
@@ -180,7 +179,7 @@ export default function CreateListingModal({ userPlayers, activeListingPlayerIds
                                     </button>
                                 );
                             })}
-                            
+
                             {filteredPlayers.length === 0 && (
                                 <div className="text-center py-8 text-gray-500 text-xs font-mono">
                                     NO ASSETS FOUND
@@ -204,15 +203,11 @@ export default function CreateListingModal({ userPlayers, activeListingPlayerIds
                                         <div className="absolute inset-0 rounded-full border-2 border-green-500/50 shadow-[0_0_30px_rgba(34,197,94,0.3)] animate-pulse-slow" />
                                         <div className="absolute inset-0 rounded-full border border-green-500/20 animate-ping opacity-20" />
                                         <div className="w-full h-full rounded-full overflow-hidden relative bg-black">
-                                            {selectedPlayer.photoUrl ? (
-                                                <img
-                                                    src={selectedPlayer.photoUrl}
-                                                    alt={selectedPlayer.fullName}
-                                                    className="w-full h-full object-cover sepia hue-rotate-[50deg] contrast-125 opacity-90"
-                                                />
-                                            ) : (
-                                                <div className="w-full h-full flex items-center justify-center text-4xl">👤</div>
-                                            )}
+                                            <img
+                                                src={selectedPlayer.photoUrl || "/default-avatar.svg"}
+                                                alt={selectedPlayer.fullName}
+                                                className="w-full h-full object-cover sepia hue-rotate-[50deg] contrast-125 opacity-90"
+                                            />
                                             <div className="absolute inset-0 bg-[linear-gradient(transparent_50%,rgba(0,255,0,0.1)_50%)] bg-[length:100%_4px] pointer-events-none" />
                                         </div>
                                     </div>

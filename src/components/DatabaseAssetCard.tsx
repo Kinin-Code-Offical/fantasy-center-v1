@@ -40,19 +40,15 @@ export default function DatabaseAssetCard({ player }: Props) {
                 {/* Circle Container */}
                 <div className="relative w-40 h-40 rounded-full border-2 border-white/5 flex items-center justify-center group-hover:border-white/20 transition-colors duration-300">
 
-                    {player.photoUrl ? (
-                        <div className="w-36 h-36 rounded-full overflow-hidden relative">
-                            <img
-                                src={player.photoUrl}
-                                alt={player.fullName}
-                                className="w-full h-full object-cover opacity-50 group-hover:opacity-80 transition-opacity duration-300"
-                                loading="lazy"
-                            />
-                            <div className="absolute inset-0 bg-black/20" />
-                        </div>
-                    ) : (
-                        <div className="text-6xl opacity-20 text-white">👤</div>
-                    )}
+                    <div className="w-36 h-36 rounded-full overflow-hidden relative">
+                        <img
+                            src={player.photoUrl || "/default-avatar.svg"}
+                            alt={player.fullName}
+                            className="w-full h-full object-cover opacity-50 group-hover:opacity-80 transition-opacity duration-300"
+                            loading="lazy"
+                        />
+                        <div className="absolute inset-0 bg-black/20" />
+                    </div>
                 </div>
 
                 {/* Player Name Overlay */}

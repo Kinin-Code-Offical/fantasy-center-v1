@@ -131,9 +131,10 @@ export default function TradeOfferInterface({
                                         {/* Holographic Card Effect */}
                                         <div className="relative w-24 h-24 mx-auto rounded-full border-2 border-blue-500 overflow-hidden mb-3 shadow-[0_0_30px_rgba(59,130,246,0.4)] group-hover:shadow-[0_0_50px_rgba(59,130,246,0.6)] transition-all">
                                             <div className="absolute inset-0 bg-blue-500/20 animate-pulse z-10" />
-                                            {selectedPlayer.photoUrl ? (
-                                                <img src={selectedPlayer.photoUrl} className="w-full h-full object-cover sepia hue-rotate-180 contrast-125" />
-                                            ) : <div className="w-full h-full bg-gray-800" />}
+                                            <img
+                                                src={selectedPlayer.photoUrl || "/default-avatar.svg"}
+                                                className="w-full h-full object-cover sepia hue-rotate-180 contrast-125"
+                                            />
                                             {/* Scanline */}
                                             <div className="absolute inset-0 bg-[linear-gradient(transparent_50%,rgba(0,0,255,0.2)_50%)] bg-[length:100%_4px] pointer-events-none" />
                                         </div>
@@ -184,14 +185,14 @@ export default function TradeOfferInterface({
                                                     setSelectedPlayerId(p.id);
                                                 }}
                                                 className={`w-full flex items-center gap-3 p-3 rounded border transition-all duration-200 text-left group relative overflow-hidden ${isLocked
-                                                        ? "bg-red-900/10 border-red-900/30 opacity-50 cursor-not-allowed"
-                                                        : selectedPlayerId === p.id
-                                                            ? "bg-blue-500/20 border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.2)]"
-                                                            : "bg-white/5 border-transparent hover:border-white/20 hover:bg-white/10"
+                                                    ? "bg-red-900/10 border-red-900/30 opacity-50 cursor-not-allowed"
+                                                    : selectedPlayerId === p.id
+                                                        ? "bg-blue-500/20 border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.2)]"
+                                                        : "bg-white/5 border-transparent hover:border-white/20 hover:bg-white/10"
                                                     }`}
                                             >
                                                 <div className="w-10 h-10 rounded bg-gray-800 overflow-hidden flex-shrink-0 border border-white/10 relative">
-                                                    {p.photoUrl && <img src={p.photoUrl} className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all" />}
+                                                    <img src={p.photoUrl || "/default-avatar.svg"} className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all" />
                                                     {isLocked && (
                                                         <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
                                                             <Lock className="w-4 h-4 text-red-500" />
@@ -382,12 +383,10 @@ export default function TradeOfferInterface({
                                 {/* Task 4: Holographic Player Image */}
                                 <div className="relative w-56 h-56 rounded-full border-4 border-green-500/30 shadow-[0_0_60px_rgba(34,197,94,0.3)] flex items-center justify-center mb-8 group">
                                     <div className="absolute inset-0 rounded-full border border-green-500/20 animate-ping opacity-20" />
-                                    {listing.player.photoUrl ? (
-                                        <img
-                                            src={listing.player.photoUrl}
-                                            className="w-52 h-52 rounded-full object-cover sepia hue-rotate-[50deg] contrast-125 opacity-90 group-hover:opacity-100 transition-opacity"
-                                        />
-                                    ) : <div className="text-6xl">👤</div>}
+                                    <img
+                                        src={listing.player.photoUrl || "/default-avatar.svg"}
+                                        className="w-52 h-52 rounded-full object-cover sepia hue-rotate-[50deg] contrast-125 opacity-90 group-hover:opacity-100 transition-opacity"
+                                    />
 
                                     {/* Task 4: Vertical Scanline */}
                                     <div className="absolute inset-0 rounded-full overflow-hidden">

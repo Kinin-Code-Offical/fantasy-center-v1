@@ -21,20 +21,33 @@ export default async function Home() {
   let isYahooConnected = false;
   let userTeams: any[] = [];
 
-  // Fetch public data for the landing page (Top Players)
-  const topPlayers = await prisma.player.findMany({
-    take: 5,
-    orderBy: { projectedPoints: 'desc' },
-    select: {
-      id: true,
-      fullName: true,
-      projectedPoints: true,
-      photoUrl: true,
-      editorialTeam: true,
-      primaryPos: true,
-      stats: true
-    }
-  });
+  let topPlayers: any[] = [];
+
+  try {
+    // Fetch public data for the landing page (Top Players)
+    topPlayers = await prisma.player.findMany({
+      take: 5,
+      orderBy: { projectedPoints: 'desc' },
+      select: {
+        id: true,
+        fullName: true,
+        projectedPoints: true,
+        photoUrl: true,
+        editorialTeam: true,
+        primaryPos: true,
+        stats: true
+      }
+    });
+  } catch (e) {
+    console.warn("Database connection failed, using fallback data for landing page.");
+    // Fallback data to prevent crash if DB is down
+    topPlayers = [
+      { id: '1', fullName: 'J. Jefferson', projectedPoints: 24.5, photoUrl: null, editorialTeam: 'MIN', primaryPos: 'WR', stats: { ppg: 24.5 } },
+      { id: '2', fullName: 'C. McCaffrey', projectedPoints: 22.1, photoUrl: null, editorialTeam: 'SF', primaryPos: 'RB', stats: { ppg: 22.1 } },
+      { id: '3', fullName: 'T. Hill', projectedPoints: 19.8, photoUrl: null, editorialTeam: 'MIA', primaryPos: 'WR', stats: { ppg: 19.8 } },
+      { id: '4', fullName: 'C. Lamb', projectedPoints: 18.5, photoUrl: null, editorialTeam: 'DAL', primaryPos: 'WR', stats: { ppg: 18.5 } },
+    ];
+  }
 
   if (session?.user) {
     // --- ONBOARDING CHECK ---

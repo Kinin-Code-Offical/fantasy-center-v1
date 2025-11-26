@@ -110,19 +110,15 @@ export default function TradeCard({ listing, userPlayers, currentUserId }: Props
                     <div className="relative w-40 h-40 rounded-full border-2 border-green-500/30 shadow-[0_0_30px_rgba(34,197,94,0.2)] flex items-center justify-center group-hover/image:border-green-400 group-hover/image:shadow-[0_0_50px_rgba(34,197,94,0.5)] transition-all duration-500">
                         <div className="absolute inset-0 rounded-full border border-green-500/20 animate-ping opacity-20" />
 
-                        {listing.player.photoUrl ? (
-                            <div className="w-36 h-36 rounded-full overflow-hidden relative">
-                                <img
-                                    src={listing.player.photoUrl}
-                                    alt={listing.player.fullName}
-                                    className="w-full h-full object-cover sepia hue-rotate-[50deg] contrast-125 opacity-90 group-hover/image:opacity-100 transition-all duration-500"
-                                />
-                                {/* Glitch/Scan effect on image */}
-                                <div className="absolute inset-0 bg-[linear-gradient(transparent_50%,rgba(0,255,0,0.1)_50%)] bg-[length:100%_4px] pointer-events-none" />
-                            </div>
-                        ) : (
-                            <div className="text-6xl opacity-50 text-green-500">👤</div>
-                        )}
+                        <div className="w-36 h-36 rounded-full overflow-hidden relative">
+                            <img
+                                src={listing.player.photoUrl || "/default-avatar.svg"}
+                                alt={listing.player.fullName}
+                                className="w-full h-full object-cover sepia hue-rotate-[50deg] contrast-125 opacity-90 group-hover/image:opacity-100 transition-all duration-500"
+                            />
+                            {/* Glitch/Scan effect on image */}
+                            <div className="absolute inset-0 bg-[linear-gradient(transparent_50%,rgba(0,255,0,0.1)_50%)] bg-[length:100%_4px] pointer-events-none" />
+                        </div>
                     </div>
 
                     {/* Player Name Overlay */}

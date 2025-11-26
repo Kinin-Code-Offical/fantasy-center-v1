@@ -86,13 +86,13 @@ export default async function PlayerPage({ params, searchParams }: { params: Pro
                         <div className="relative group shrink-0">
                             <div className="absolute inset-0 bg-green-500/20 blur-xl rounded-full animate-pulse" />
                             <div className="relative w-48 h-48 md:w-56 md:h-56 bg-black" style={{ clipPath: "polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)" }}>
-                                {player.photoUrl ? (
-                                    <Image src={player.photoUrl} alt={player.fullName} fill sizes="(max-width: 768px) 192px, 224px" className="object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
-                                ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-4xl text-green-900 font-bold bg-green-900/10">
-                                        {player.fullName.charAt(0)}
-                                    </div>
-                                )}
+                                <Image
+                                    src={player.photoUrl || "/default-avatar.svg"}
+                                    alt={player.fullName}
+                                    fill
+                                    sizes="(max-width: 768px) 192px, 224px"
+                                    className="object-cover opacity-90 group-hover:opacity-100 transition-opacity"
+                                />
                                 {/* Scanline Overlay */}
                                 <div className="absolute inset-0 bg-[linear-gradient(transparent_50%,rgba(0,255,0,0.1)_50%)] bg-[size:100%_4px] pointer-events-none" />
                             </div>

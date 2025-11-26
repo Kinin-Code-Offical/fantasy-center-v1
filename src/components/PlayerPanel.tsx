@@ -38,7 +38,7 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({ players }) => {
                             <div className="flex items-center space-x-3">
                                 <div className="w-8 h-8 rounded-full overflow-hidden border border-green-500/50 group-hover:border-green-400 transition-colors bg-black">
                                     <img
-                                        src={player.photoUrl || "https://s.yimg.com/lq/i/us/sp/v/nfl/players_l/20230913/default_headshot.png"}
+                                        src={player.photoUrl || "/default-avatar.svg"}
                                         alt={player.fullName}
                                         className="w-full h-full object-cover"
                                     />

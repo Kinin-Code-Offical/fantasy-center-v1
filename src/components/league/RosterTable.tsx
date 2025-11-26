@@ -88,20 +88,14 @@ export default function RosterTable({ players, leagueId, isViewingRival, userPla
                                 {/* Optimized: Removed blur-md, used simple opacity */}
                                 <div className="absolute inset-0 bg-green-500/10 rounded-full group-hover:bg-green-500/30 transition-colors" />
                                 <div className="relative h-full w-full rounded-full overflow-hidden border-2 border-white/10 group-hover:border-green-500 transition-colors bg-black">
-                                    {player.photoUrl ? (
-                                        <Image
-                                            src={player.photoUrl}
-                                            alt={player.fullName}
-                                            fill
-                                            sizes="56px"
-                                            className="object-cover"
-                                            loading="lazy"
-                                        />
-                                    ) : (
-                                        <div className="flex h-full w-full items-center justify-center text-xs text-gray-500 font-mono">
-                                            N/A
-                                        </div>
-                                    )}
+                                    <Image
+                                        src={player.photoUrl || "/default-avatar.svg"}
+                                        alt={player.fullName}
+                                        fill
+                                        sizes="56px"
+                                        className="object-cover"
+                                        loading="lazy"
+                                    />
                                 </div>
                             </div>
 

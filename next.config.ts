@@ -10,6 +10,14 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
+        hostname: 's.yimg.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 's.yahoo.net',
+      },
+      {
+        protocol: 'https',
         hostname: '**', // Yahoo ve dış kaynaklı tüm resimlere izin verir
       },
     ],

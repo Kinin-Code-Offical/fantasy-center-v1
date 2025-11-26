@@ -258,8 +258,9 @@ async function syncTeamRosterInternal(teamKey: string, accessToken: string, team
                 const playerKey = getField(playerMeta, "player_key");
                 const name = getField(playerMeta, "name");
                 const editorialTeam = getField(playerMeta, "editorial_team_abbr");
-                const headshot = getField(playerMeta, "primary_position");
-                const primaryPos = getField(playerMeta, "status"); // e.g. "Q", "O", "IR"
+                const headshot = getField(playerMeta, "headshot");
+                const primaryPos = getField(playerMeta, "primary_position");
+                const status = getField(playerMeta, "status");
 
                 // --- STATS & METRICS ---
                 const STAT_MAP: Record<string, string> = { "12": "pts", "15": "reb", "16": "ast", "19": "st", "20": "blk" };
@@ -397,7 +398,7 @@ async function syncTeamRosterInternal(teamKey: string, accessToken: string, team
                 let marketValue = basePoints * 300000;
 
                 // Injury Adjustment
-                if (primaryPos === 'O' || primaryPos === 'INJ') {
+                if (status === 'O' || status === 'INJ') {
                     marketValue = marketValue * 0.5;
                 }
 
@@ -419,7 +420,7 @@ async function syncTeamRosterInternal(teamKey: string, accessToken: string, team
                         editorialTeam: editorialTeam,
                         photoUrl: headshot?.url,
                         primaryPos: primaryPos,
-                        status: primaryPos,
+                        status: status,
                         fantasyPoints: fantasyPoints,
                         projectedPoints: projectedPoints,
                         percentOwned: percentOwned,
@@ -433,7 +434,7 @@ async function syncTeamRosterInternal(teamKey: string, accessToken: string, team
                         editorialTeam: editorialTeam,
                         photoUrl: headshot?.url,
                         primaryPos: primaryPos,
-                        status: primaryPos,
+                        status: status,
                         fantasyPoints: fantasyPoints,
                         projectedPoints: projectedPoints,
                         percentOwned: percentOwned,

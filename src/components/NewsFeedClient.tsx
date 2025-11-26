@@ -34,8 +34,8 @@ export default function NewsFeedClient({ news }: NewsFeedClientProps) {
 
                 <div className="flex-1 overflow-y-auto space-y-4 pr-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
                     {news.length > 0 ? news.map((item) => (
-                        <div 
-                            key={item.id} 
+                        <div
+                            key={item.id}
                             onClick={() => setSelectedNews(item)}
                             className="block group cursor-pointer"
                         >
@@ -43,13 +43,11 @@ export default function NewsFeedClient({ news }: NewsFeedClientProps) {
                                 <div className="flex items-start gap-3">
                                     {/* Avatar */}
                                     <div className="w-8 h-8 rounded-full bg-gray-800 overflow-hidden flex-shrink-0 border border-white/10">
-                                        {item.player.photoUrl ? (
-                                            <img src={item.player.photoUrl} alt={item.player.fullName} className="w-full h-full object-cover" />
-                                        ) : (
-                                            <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-gray-500">
-                                                {item.player.fullName.substring(0, 2)}
-                                            </div>
-                                        )}
+                                        <img
+                                            src={item.player.photoUrl || "/default-avatar.svg"}
+                                            alt={item.player.fullName}
+                                            className="w-full h-full object-cover"
+                                        />
                                     </div>
 
                                     <div>
@@ -78,9 +76,9 @@ export default function NewsFeedClient({ news }: NewsFeedClientProps) {
             </div>
 
             {selectedNews && (
-                <NewsReaderModal 
-                    newsItem={selectedNews} 
-                    onClose={() => setSelectedNews(null)} 
+                <NewsReaderModal
+                    newsItem={selectedNews}
+                    onClose={() => setSelectedNews(null)}
                 />
             )}
         </>

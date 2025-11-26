@@ -150,23 +150,29 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
             };
         }
 
-        const listings = await prisma.tradeListing.findMany({
-            where: whereClause,
-            include: {
-                seller: true,
-                player: {
-                    include: {
-                        teams: {
-                            include: {
-                                league: true
+        let listings: any[] = [];
+        try {
+            listings = await prisma.tradeListing.findMany({
+                where: whereClause,
+                include: {
+                    seller: true,
+                    player: {
+                        include: {
+                            teams: {
+                                include: {
+                                    league: true
+                                }
                             }
                         }
-                    }
+                    },
+                    offers: true
                 },
-                offers: true
-            },
-            orderBy: { createdAt: "desc" }
-        });
+                orderBy: { createdAt: "desc" }
+            });
+        } catch (error) {
+            console.error("Failed to fetch listings:", error);
+            listings = [];
+        }
         displayItems = listings;
     }
 

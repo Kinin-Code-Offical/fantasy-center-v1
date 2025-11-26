@@ -24,12 +24,12 @@ export default function MarketListingCard({ player, initiator, lookingFor, creat
         <div className="bg-gray-900/80 border border-white/10 rounded-xl overflow-hidden hover:border-cyan-500/50 transition-all duration-300 group flex flex-col">
             {/* Player Header */}
             <div className="relative h-32 bg-gradient-to-b from-gray-800 to-gray-900 p-4 flex items-center gap-4">
-                <div className="w-20 h-20 rounded-full bg-gray-700 border-2 border-cyan-500/30 overflow-hidden shrink-0">
-                    {player.photoUrl ? (
-                        <img src={player.photoUrl} alt={player.fullName} className="w-full h-full object-cover" />
-                    ) : (
-                        <div className="w-full h-full flex items-center justify-center text-2xl">👤</div>
-                    )}
+                <div className="w-20 h-20 rounded-full bg-gray-700 border-2 border-cyan-500/30 overflow-hidden shrink-0 relative">
+                    <img
+                        src={player.photoUrl || "/default-avatar.svg"}
+                        alt={player.fullName}
+                        className="w-full h-full object-cover"
+                    />
                 </div>
                 <div>
                     <h3 className="text-lg font-bold text-white group-hover:text-cyan-400 transition-colors">{player.fullName}</h3>

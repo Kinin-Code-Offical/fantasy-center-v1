@@ -109,9 +109,10 @@ export default function MakeOfferModal({ listing, userPlayers, onClose, activeTr
                         <div className="flex items-center gap-5">
                             <div className="w-16 h-16 rounded-lg bg-black overflow-hidden border border-neon-green/50 relative group shadow-[0_0_15px_rgba(0,255,65,0.2)]">
                                 <div className="absolute inset-0 bg-[linear-gradient(transparent_50%,rgba(0,255,65,0.2)_50%)] bg-[length:100%_4px] pointer-events-none z-10" />
-                                {listing.player.photoUrl ? (
-                                    <img src={listing.player.photoUrl} className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500" />
-                                ) : <div className="w-full h-full flex items-center justify-center text-2xl">👤</div>}
+                                <img
+                                    src={listing.player.photoUrl || "/default-avatar.svg"}
+                                    className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500"
+                                />
                             </div>
                             <div>
                                 <div className="font-black text-white text-xl uppercase italic tracking-wider mb-1">{listing.player.fullName}</div>
@@ -179,11 +180,11 @@ export default function MakeOfferModal({ listing, userPlayers, onClose, activeTr
                                             }`}
                                     >
                                         <div className="w-10 h-10 bg-black/40 overflow-hidden border border-white/10 rounded relative">
-                                            {p.photoUrl ? (
-                                                <img src={p.photoUrl} alt={p.fullName} className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all" />
-                                            ) : (
-                                                <div className="w-full h-full flex items-center justify-center text-xs font-bold">{p.primaryPos}</div>
-                                            )}
+                                            <img
+                                                src={p.photoUrl || "/default-avatar.svg"}
+                                                alt={p.fullName}
+                                                className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all"
+                                            />
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="text-xs font-bold truncate font-mono flex items-center gap-2 group-hover:text-neon-cyan transition-colors">

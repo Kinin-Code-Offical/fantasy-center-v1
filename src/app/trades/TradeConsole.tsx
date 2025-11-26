@@ -259,7 +259,7 @@ function YahooTradeCard({ trade, userTeamKeys }: { trade: any, userTeamKeys: str
                                         <div className="w-16 h-16 bg-gray-900 relative flex items-center justify-center border border-red-500/30" style={{ clipPath: "polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)" }}>
                                             <div className="absolute inset-0.5 bg-black" style={{ clipPath: "polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)" }}>
                                                 {item.player ? (
-                                                    <Image src={item.player.photoUrl || "/placeholder-player.png"} alt={item.player.fullName} fill sizes="64px" className="object-cover grayscale hover:grayscale-0 transition-all" />
+                                                    <Image src={item.player.photoUrl || "/default-avatar.svg"} alt={item.player.fullName} fill sizes="64px" className="object-cover grayscale hover:grayscale-0 transition-all" />
                                                 ) : (
                                                     <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-500">?</div>
                                                 )}
@@ -290,7 +290,7 @@ function YahooTradeCard({ trade, userTeamKeys }: { trade: any, userTeamKeys: str
                                         <div className="w-16 h-16 bg-gray-900 relative flex items-center justify-center border border-neon-green/30" style={{ clipPath: "polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)" }}>
                                             <div className="absolute inset-0.5 bg-black" style={{ clipPath: "polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)" }}>
                                                 {item.player ? (
-                                                    <Image src={item.player.photoUrl || "/placeholder-player.png"} alt={item.player.fullName} fill sizes="64px" className="object-cover grayscale hover:grayscale-0 transition-all" />
+                                                    <Image src={item.player.photoUrl || "/default-avatar.svg"} alt={item.player.fullName} fill sizes="64px" className="object-cover grayscale hover:grayscale-0 transition-all" />
                                                 ) : (
                                                     <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-500">?</div>
                                                 )}
@@ -484,7 +484,7 @@ function TradeCard({ item, isIncoming, onAccept, onDecline, onCancel, isLoading,
                                         <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 z-20 pointer-events-none" style={{ backgroundSize: "200% 200%", animation: "hologram 3s linear infinite" }} />
                                         <div className="absolute inset-0 bg-[linear-gradient(transparent_50%,rgba(239,68,68,0.1)_50%)] bg-[length:100%_4px] pointer-events-none z-10" />
 
-                                        <Image src={youGivePlayer.photoUrl || "/placeholder-player.png"} alt={youGivePlayer.fullName} fill sizes="80px" className="object-cover grayscale group-hover:grayscale-0 transition-all duration-500" />
+                                        <Image src={youGivePlayer.photoUrl || "/default-avatar.svg"} alt={youGivePlayer.fullName} fill sizes="80px" className="object-cover grayscale group-hover:grayscale-0 transition-all duration-500" />
                                     </div>
                                 ) : (
                                     <div className="text-xs font-bold text-red-500">CASH</div>
@@ -515,7 +515,7 @@ function TradeCard({ item, isIncoming, onAccept, onDecline, onCancel, isLoading,
                                         <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 z-20 pointer-events-none" style={{ backgroundSize: "200% 200%", animation: "hologram 3s linear infinite" }} />
                                         <div className="absolute inset-0 bg-[linear-gradient(transparent_50%,rgba(0,255,65,0.1)_50%)] bg-[length:100%_4px] pointer-events-none z-10" />
 
-                                        <Image src={youGetPlayer.photoUrl || "/placeholder-player.png"} alt={youGetPlayer.fullName} fill sizes="80px" className="object-cover grayscale group-hover:grayscale-0 transition-all duration-500" />
+                                        <Image src={youGetPlayer.photoUrl || "/default-avatar.svg"} alt={youGetPlayer.fullName} fill sizes="80px" className="object-cover grayscale group-hover:grayscale-0 transition-all duration-500" />
                                     </div>
                                 ) : (
                                     <div className="text-xs font-bold text-neon-green">CASH</div>

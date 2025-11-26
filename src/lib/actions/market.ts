@@ -212,7 +212,7 @@ export async function makeOffer(listingId: string, offeredPlayerId: string, cred
     });
 
     if (existingDuplicateOffer) {
-        throw new Error("You already have a pending offer with these exact assets for this listing.");
+        throw new Error("You have already offered this specific player.");
     }
 
     const redirectUrl = getTradeRedirectUrl(targetLeague.game.code, leagueKey, sourceTeamKey, targetTeamKey, offeredPlayerKeys, requestedPlayerKeys);
@@ -565,6 +565,23 @@ export async function makeDirectOffer(targetPlayerId: string, offeredPlayerId: s
         if (!ownsPlayer) {
             throw new Error("You do not own the player you are offering.");
         }
+    }
+
+    // 2.5 Check for Duplicate Direct Offers
+    const existingDuplicate = await prisma.tradeOffer.findFirst({
+        where: {
+            offererId: userId,
+            status: "PENDING",
+            offeredPlayerId: offeredPlayerId || null,
+            listing: {
+                playerId: targetPlayerId,
+                status: "DIRECT_REQUEST"
+            }
+        }
+    });
+
+    if (existingDuplicate) {
+        throw new Error("You have already offered this specific player for this target.");
     }
 
     // 3. Create "Shadow" Listing (Direct Request)
