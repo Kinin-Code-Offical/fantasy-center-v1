@@ -118,8 +118,10 @@ export async function getLeagueTransactions(accessToken: string, leagueKey: stri
     return await yahooFetch(`/league/${leagueKey}/transactions`, accessToken);
 }
 
-export async function getPendingTradeTransactions(accessToken: string, leagueKey: string) {
-    return await yahooFetch(`/league/${leagueKey}/transactions;types=pending_trade`, accessToken);
+// GÜNCELLENMİŞ FONKSİYON: teamKey parametresi eklendi
+export async function getPendingTradeTransactions(accessToken: string, leagueKey: string, teamKey: string) {
+    // team_key parametresi URL'e eklendi
+    return await yahooFetch(`/league/${leagueKey}/transactions;team_key=${teamKey};types=pending_trade`, accessToken);
 }
 
 

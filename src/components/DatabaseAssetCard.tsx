@@ -10,7 +10,7 @@ interface Props {
 
 export default function DatabaseAssetCard({ player }: Props) {
     return (
-        <div className="group relative bg-black/20 border border-white/5 rounded-xl overflow-hidden hover:border-white/20 transition-all duration-500 flex flex-col h-[500px] grayscale hover:grayscale-0">
+        <div className="group relative bg-black/20 border border-white/5 rounded-xl overflow-hidden hover:border-white/20 transition-colors duration-300 flex flex-col h-[500px] grayscale hover:grayscale-0">
             {/* Scanline Overlay */}
             <div className="absolute inset-0 pointer-events-none z-0 opacity-5"
                 style={{ backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 2px, #ffffff 3px)" }} />
@@ -38,14 +38,15 @@ export default function DatabaseAssetCard({ player }: Props) {
             {/* Main Asset Image (Static Style) */}
             <div className="relative flex-1 flex items-center justify-center overflow-hidden z-10 mt-8">
                 {/* Circle Container */}
-                <div className="relative w-40 h-40 rounded-full border-2 border-white/5 flex items-center justify-center group-hover:border-white/20 transition-all duration-500">
+                <div className="relative w-40 h-40 rounded-full border-2 border-white/5 flex items-center justify-center group-hover:border-white/20 transition-colors duration-300">
 
                     {player.photoUrl ? (
                         <div className="w-36 h-36 rounded-full overflow-hidden relative">
                             <img
                                 src={player.photoUrl}
                                 alt={player.fullName}
-                                className="w-full h-full object-cover opacity-50 group-hover:opacity-80 transition-all duration-500"
+                                className="w-full h-full object-cover opacity-50 group-hover:opacity-80 transition-opacity duration-300"
+                                loading="lazy"
                             />
                             <div className="absolute inset-0 bg-black/20" />
                         </div>
@@ -56,7 +57,7 @@ export default function DatabaseAssetCard({ player }: Props) {
 
                 {/* Player Name Overlay */}
                 <div className="absolute bottom-0 left-0 right-0 p-4 text-center z-20">
-                    <h3 className="text-2xl font-black text-gray-500 group-hover:text-gray-300 uppercase italic tracking-tighter transition-colors">
+                    <h3 className="text-2xl font-black text-gray-500 group-hover:text-gray-300 uppercase italic tracking-tighter transition-colors duration-300">
                         {player.fullName}
                     </h3>
                     <div className="flex items-center justify-center gap-3 mt-1">

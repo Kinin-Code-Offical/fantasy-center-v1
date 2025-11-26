@@ -1,4 +1,3 @@
-
 export function getTradeRedirectUrl(
     sportCode: string,
     leagueKey: string,
@@ -69,4 +68,63 @@ export function getTradeRedirectUrl(
     const finalUrl = baseUrl + queryString;
     console.log("[Trade Debug] Final Generated URL:", finalUrl);
     return finalUrl;
+}
+
+export function getTradeDetailUrl(
+    sportCode: string,
+    leagueKey: string,
+    transactionId?: string,
+    teamId?: string
+) {
+    const getIntId = (key: string) => key.split('.').pop();
+    const leagueId = getIntId(leagueKey);
+
+    let subdomain = "fantasysports";
+    let sportPath = "";
+
+    switch (sportCode.toLowerCase()) {
+        case "nfl":
+            subdomain = "football.fantasysports";
+            sportPath = "f1";
+            break;
+        case "nba":
+            subdomain = "basketball.fantasysports";
+            sportPath = "nba";
+            break;
+        case "mlb":
+            subdomain = "baseball.fantasysports";
+            sportPath = "b1";
+            break;
+        case "nhl":
+            subdomain = "hockey.fantasysports";
+            sportPath = "hockey";
+            break;
+        default:
+            subdomain = `${sportCode}.fantasysports`;
+            sportPath = sportCode;
+            break;
+    }
+
+    // If we have a specific transaction ID (Yahoo's numeric ID, not the full key)
+    // We can try to link to it. But usually, the transactions page is the safest bet.
+    // Yahoo Transaction Key format: {gameId}.l.{leagueId}.tr.{transactionId}
+    // We just need the last part.
+
+    // Default URL: Transactions page
+    let url = `https://${subdomain}.yahoo.com/${sportPath}/${leagueId}/transactions`;
+
+    if (transactionId) {
+        // If it's a full key, extract the ID
+        const shortId = transactionId.includes('.tr.') ? transactionId.split('.tr.')[1] :
+            transactionId.includes('.pt.') ? transactionId.split('.pt.')[1] :
+                transactionId;
+
+        // If we have a teamId, we can use the viewtrade endpoint
+        if (teamId) {
+            // Format: https://basketball.fantasysports.yahoo.com/nba/336522/2/viewtrade?trid=25
+            url = `https://${subdomain}.yahoo.com/${sportPath}/${leagueId}/${teamId}/viewtrade?trid=${shortId}`;
+        }
+    }
+
+    return url;
 }

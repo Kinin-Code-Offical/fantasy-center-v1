@@ -20,7 +20,11 @@ const ToastContext = createContext<ToastContextType | undefined>(undefined);
 export function useToast() {
     const context = useContext(ToastContext);
     if (!context) {
-        throw new Error("useToast must be used within a ToastProvider");
+        // SSR veya Provider dışı kullanımda hata fırlatmak yerine dummy fonksiyon döndür
+        // Bu, "Switched to client rendering" hatasını önler.
+        return {
+            showToast: (message: string, type?: ToastType) => console.log("[Toast Fallback]:", message)
+        };
     }
     return context;
 }
@@ -52,9 +56,9 @@ export default function ToastProvider({ children }: { children: React.ReactNode 
                     <div
                         key={toast.id}
                         className={`pointer-events-auto relative overflow-hidden p-4 rounded border backdrop-blur-md shadow-2xl animate-in slide-in-from-right-full fade-in duration-300 ${toast.type === "success" ? "bg-green-950/80 border-green-500 text-green-400" :
-                                toast.type === "error" ? "bg-red-950/80 border-red-500 text-red-400" :
-                                    toast.type === "warning" ? "bg-yellow-950/80 border-yellow-500 text-yellow-400" :
-                                        "bg-blue-950/80 border-blue-500 text-blue-400"
+                            toast.type === "error" ? "bg-red-950/80 border-red-500 text-red-400" :
+                                toast.type === "warning" ? "bg-yellow-950/80 border-yellow-500 text-yellow-400" :
+                                    "bg-blue-950/80 border-blue-500 text-blue-400"
                             }`}
                     >
                         {/* Scanline Effect */}
@@ -62,8 +66,8 @@ export default function ToastProvider({ children }: { children: React.ReactNode 
 
                         {/* Glitch/Tech Deco */}
                         <div className={`absolute top-0 left-0 w-1 h-full ${toast.type === "success" ? "bg-green-500" :
-                                toast.type === "error" ? "bg-red-500" :
-                                    toast.type === "warning" ? "bg-yellow-500" : "bg-blue-500"
+                            toast.type === "error" ? "bg-red-500" :
+                                toast.type === "warning" ? "bg-yellow-500" : "bg-blue-500"
                             }`} />
 
                         <div className="flex items-start gap-3 relative z-10">

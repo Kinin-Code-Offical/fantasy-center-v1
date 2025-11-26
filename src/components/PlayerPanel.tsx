@@ -1,22 +1,23 @@
 import React from 'react';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
-interface Player {
+interface PlayerData {
     id: string;
-    name: string;
-    points: number;
-    trend: 'up' | 'down' | 'stable';
-    image: string;
+    fullName: string;
+    projectedPoints: number;
+    photoUrl: string | null;
+    editorialTeam: string | null;
+    primaryPos: string | null;
 }
 
-const players: Player[] = [
-    { id: '1', name: 'J. Jefferson', points: 24.5, trend: 'up', image: 'https://picsum.photos/40/40?random=1' },
-    { id: '2', name: 'C. McCaffrey', points: 22.1, trend: 'up', image: 'https://picsum.photos/40/40?random=2' },
-    { id: '3', name: 'T. Hill', points: 19.8, trend: 'down', image: 'https://picsum.photos/40/40?random=3' },
-    { id: '4', name: 'C. Lamb', points: 18.5, trend: 'stable', image: 'https://picsum.photos/40/40?random=4' },
-];
+interface PlayerPanelProps {
+    players: PlayerData[];
+}
 
-const PlayerPanel: React.FC = () => {
+const PlayerPanel: React.FC<PlayerPanelProps> = ({ players }) => {
+    // Fallback if no players provided
+    const displayPlayers = players.length > 0 ? players : [];
+
     return (
         <div className="hidden lg:flex flex-col w-64 h-[400px] bg-cyber-panel/80 backdrop-blur-md border border-green-500/30 rounded-lg relative overflow-hidden transform hover:scale-105 transition-transform duration-500 animate-float" style={{ animationDelay: '1s' }}>
             {/* Decorative Corners */}
@@ -28,24 +29,37 @@ const PlayerPanel: React.FC = () => {
             </div>
 
             <div className="flex-1 p-4 space-y-4">
-                {players.map((player) => (
-                    <div key={player.id} className="flex items-center justify-between group cursor-pointer">
-                        <div className="flex items-center space-x-3">
-                            <div className="w-8 h-8 rounded-full overflow-hidden border border-green-500/50 group-hover:border-green-400 transition-colors">
-                                <img src={player.image} alt={player.name} className="w-full h-full object-cover" />
+                {displayPlayers.map((player, index) => {
+                    // Simulate trend based on index for visual variety
+                    const trend = index % 3 === 0 ? 'up' : index % 3 === 1 ? 'stable' : 'down';
+
+                    return (
+                        <div key={player.id} className="flex items-center justify-between group cursor-pointer">
+                            <div className="flex items-center space-x-3">
+                                <div className="w-8 h-8 rounded-full overflow-hidden border border-green-500/50 group-hover:border-green-400 transition-colors bg-black">
+                                    <img
+                                        src={player.photoUrl || "https://s.yimg.com/lq/i/us/sp/v/nfl/players_l/20230913/default_headshot.png"}
+                                        alt={player.fullName}
+                                        className="w-full h-full object-cover"
+                                    />
+                                </div>
+                                <div>
+                                    <div className="text-xs text-white font-bold font-sans tracking-wide group-hover:text-green-400 transition-colors truncate max-w-[100px]">
+                                        {player.fullName}
+                                    </div>
+                                    <div className="text-[10px] text-emerald-400/60 font-mono">
+                                        PROJ: {player.projectedPoints.toFixed(1)}
+                                    </div>
+                                </div>
                             </div>
-                            <div>
-                                <div className="text-xs text-white font-bold font-sans tracking-wide group-hover:text-green-400 transition-colors">{player.name}</div>
-                                <div className="text-[10px] text-emerald-400/60 font-mono">PROJ: {player.points}</div>
+                            <div className="text-green-400">
+                                {trend === 'up' && <TrendingUp size={14} />}
+                                {trend === 'down' && <TrendingDown size={14} className="text-red-400" />}
+                                {trend === 'stable' && <Minus size={14} className="text-gray-400" />}
                             </div>
                         </div>
-                        <div className="text-green-400">
-                            {player.trend === 'up' && <TrendingUp size={14} />}
-                            {player.trend === 'down' && <TrendingDown size={14} className="text-red-400" />}
-                            {player.trend === 'stable' && <Minus size={14} className="text-gray-400" />}
-                        </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
 
             {/* CPU Decoration */}

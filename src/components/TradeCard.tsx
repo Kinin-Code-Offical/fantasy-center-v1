@@ -72,7 +72,7 @@ export default function TradeCard({ listing, userPlayers, currentUserId }: Props
                 document.body
             )}
 
-            <div className="group relative bg-black/40 border border-white/10 rounded-xl overflow-hidden hover:border-green-500/50 transition-all duration-500 flex flex-col h-[500px]">
+            <div className="group relative bg-black/40 border border-white/10 rounded-xl overflow-hidden hover:border-green-500/50 transition-colors duration-300 flex flex-col h-[500px]">
                 {/* Scanline Overlay */}
                 <div className="absolute inset-0 pointer-events-none z-0 opacity-10"
                     style={{ backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 2px, #22c55e 3px)" }} />
@@ -85,7 +85,7 @@ export default function TradeCard({ listing, userPlayers, currentUserId }: Props
                     <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-full bg-black border border-green-500/30 flex items-center justify-center overflow-hidden">
                             {listing.seller.avatarUrl ? (
-                                <img src={listing.seller.avatarUrl} alt={listing.seller.username} className="w-full h-full object-cover grayscale" />
+                                <img src={listing.seller.avatarUrl} alt={listing.seller.username} className="w-full h-full object-cover grayscale" loading="lazy" />
                             ) : (
                                 <span className="text-[10px] font-bold text-green-500">{listing.seller.username?.substring(0, 1)}</span>
                             )}

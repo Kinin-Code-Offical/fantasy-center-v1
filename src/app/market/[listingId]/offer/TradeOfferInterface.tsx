@@ -2,13 +2,12 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { makeOffer } from "@/lib/actions/market";
-import { syncLeagueTrades } from "@/lib/actions/trade-actions";
 import { formatCurrency } from "@/lib/format";
+import TradeProposalManager from "@/components/TradeProposalManager";
 import CyberBackground from "@/components/CyberBackground";
 import BackButton from "@/components/BackButton";
 import { useToast } from "@/components/ToastProvider";
-import { ArrowRight, Check, Zap, AlertTriangle, TrendingUp, TrendingDown, X, Coins, Activity, Shield, ScanLine, Loader2, ChevronUp, ChevronDown } from "lucide-react";
+import { ArrowRight, Check, Zap, AlertTriangle, TrendingUp, TrendingDown, X, Coins, Activity, Shield, ScanLine, Loader2, ChevronUp, ChevronDown, Lock } from "lucide-react";
 
 interface Props {
     listing: any;
@@ -17,37 +16,51 @@ interface Props {
     leagueName?: string;
     leagueId?: string;
     yahooLeagueKey?: string;
+    // YENİ EKLENEN PROPLAR:
+    sourceTeamKey?: string;
+    targetTeamKey?: string;
+    lockedPlayerIds?: string[]; // <--- EKLENDİ
 }
 
-// Helper for Typewriter Effect
-const TypewriterText = ({ text, delay = 0 }: { text: string, delay?: number }) => {
-    const [displayedText, setDisplayedText] = useState("");
+export default function TradeOfferInterface({
+    listing,
+    userPlayers,
+    currentUserId,
+    leagueName,
+    leagueId,
+    yahooLeagueKey,
+    // Yeni propları alıyoruz
+    sourceTeamKey,
+    targetTeamKey,
+    lockedPlayerIds = [] // <--- EKLENDİ
+}: Props) {
 
-    useEffect(() => {
-        let currentIndex = 0;
-        const timeout = setTimeout(() => {
-            const interval = setInterval(() => {
-                if (currentIndex <= text.length) {
-                    setDisplayedText(text.slice(0, currentIndex));
-                    currentIndex++;
-                } else {
-                    clearInterval(interval);
-                }
-            }, 30); // Typing speed
-            return () => clearInterval(interval);
-        }, delay);
-        return () => clearTimeout(timeout);
-    }, [text, delay]);
+    // Helper for Typewriter Effect
+    const TypewriterText = ({ text, delay = 0 }: { text: string, delay?: number }) => {
+        const [displayedText, setDisplayedText] = useState("");
 
-    return <span>{displayedText}</span>;
-};
+        useEffect(() => {
+            let currentIndex = 0;
+            const timeout = setTimeout(() => {
+                const interval = setInterval(() => {
+                    if (currentIndex <= text.length) {
+                        setDisplayedText(text.slice(0, currentIndex));
+                        currentIndex++;
+                    } else {
+                        clearInterval(interval);
+                    }
+                }, 30); // Typing speed
+                return () => clearInterval(interval);
+            }, delay);
+            return () => clearTimeout(timeout);
+        }, [text, delay]);
 
-export default function TradeOfferInterface({ listing, userPlayers, currentUserId, leagueName, leagueId, yahooLeagueKey }: Props) {
+        return <span>{displayedText}</span>;
+    };
     const router = useRouter();
     const { showToast } = useToast();
     const [selectedPlayerId, setSelectedPlayerId] = useState<string>("");
     const [credits, setCredits] = useState<number>(0);
-    const [isSubmitting, setIsSubmitting] = useState(false);
     const [animateUnits, setAnimateUnits] = useState(false);
 
     const selectedPlayer = userPlayers.find(p => p.id === selectedPlayerId);
@@ -86,53 +99,6 @@ export default function TradeOfferInterface({ listing, userPlayers, currentUserI
         return { incomingValue, outgoingTotal, netValue, status, color, statusColor, incomingWidth, outgoingWidth };
     }, [listing.player.marketValue, selectedPlayer, credits]);
 
-    const handleSubmit = async () => {
-        // Sound Effect: Play 'Submit_Initiated.wav'
-        setIsSubmitting(true);
-        try {
-            const result = await makeOffer(listing.id, selectedPlayerId, credits);
-
-            if (result.redirectUrl) {
-                showToast("REDIRECTING TO YAHOO FOR CONFIRMATION", "success");
-                window.open(result.redirectUrl, "_blank");
-
-                // Polling Mechanism
-                if (leagueId && yahooLeagueKey) {
-                    showToast("SYNCING WITH YAHOO... PLEASE WAIT", "info");
-                    setTimeout(async () => {
-                        try {
-                            await syncLeagueTrades(leagueId, yahooLeagueKey);
-                            showToast("SYNC COMPLETE - UPDATING UI", "success");
-                            router.push("/market");
-                            router.refresh();
-                        } catch (syncError) {
-                            console.error("Sync failed:", syncError);
-                            showToast("AUTO-SYNC FAILED - PLEASE REFRESH MANUALLY", "error");
-                        }
-                    }, 15000); // 15 seconds delay
-                    return; // Don't redirect immediately, wait for sync
-                }
-            } else {
-                showToast("OFFER TRANSMITTED SUCCESSFULLY", "success");
-            }
-
-            // Sound Effect: Play 'Transaction_Complete.wav'
-            router.push("/market");
-            router.refresh();
-        } catch (error) {
-            console.error(error);
-            // Sound Effect: Play 'Error_Alert.wav'
-            showToast("TRANSMISSION FAILED: " + (error instanceof Error ? error.message : "Unknown Error"), "error");
-        } finally {
-            if (!leagueId || !yahooLeagueKey) {
-                setIsSubmitting(false);
-            }
-            // If polling, we keep isSubmitting true to show loading state? 
-            // Or maybe we should set it to false but show a different loading state.
-            // For now, let's keep it simple.
-        }
-    };
-
     return (
         <>
             <CyberBackground />
@@ -145,7 +111,7 @@ export default function TradeOfferInterface({ listing, userPlayers, currentUserI
                         </h1>
                     </div>
 
-                    <div className="flex flex-col lg:flex-row gap-8 h-auto lg:h-[calc(100vh-200px)] min-h-[600px]">
+                    <div className="flex flex-col lg:flex-row gap-8 min-h-[600px]">
 
                         {/* LEFT: YOUR ASSETS (YOU GIVE) */}
                         <div className="flex flex-col bg-black/60 border border-white/10 rounded-xl overflow-hidden backdrop-blur-md shadow-2xl order-3 lg:order-1 w-full lg:w-1/3">
@@ -199,35 +165,50 @@ export default function TradeOfferInterface({ listing, userPlayers, currentUserI
                             </div>
 
                             {/* List */}
-                            <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar bg-black/20">
+                            <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar bg-black/20 max-h-[500px]">
                                 {userPlayers.length === 0 ? (
                                     <div className="flex flex-col items-center justify-center h-full text-gray-500 p-4 text-center">
                                         <AlertTriangle className="w-8 h-8 mb-2 text-yellow-500/50" />
                                         <div className="text-xs font-bold text-yellow-500/70">NO ASSETS AVAILABLE IN THIS LEAGUE</div>
                                     </div>
                                 ) : (
-                                    userPlayers.map(p => (
-                                        <button
-                                            key={p.id}
-                                            onClick={() => {
-                                                // Sound Effect: Play 'Select_Asset.wav'
-                                                setSelectedPlayerId(p.id);
-                                            }}
-                                            className={`w-full flex items-center gap-3 p-3 rounded border transition-all duration-200 text-left group relative overflow-hidden ${selectedPlayerId === p.id
-                                                ? "bg-blue-500/20 border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.2)]"
-                                                : "bg-white/5 border-transparent hover:border-white/20 hover:bg-white/10"
-                                                }`}
-                                        >
-                                            <div className="w-10 h-10 rounded bg-gray-800 overflow-hidden flex-shrink-0 border border-white/10">
-                                                {p.photoUrl && <img src={p.photoUrl} className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all" />}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <div className="text-sm font-bold truncate text-gray-200 group-hover:text-white">{p.fullName}</div>
-                                                <div className="text-[10px] text-gray-500 font-mono group-hover:text-blue-400">{p.primaryPos} • {p.editorialTeam}</div>
-                                            </div>
-                                            <div className="text-xs font-mono text-blue-500/70 group-hover:text-blue-400">{formatCurrency(p.marketValue)}</div>
-                                        </button>
-                                    ))
+                                    userPlayers.map(p => {
+                                        const isLocked = lockedPlayerIds.includes(p.id);
+                                        return (
+                                            <button
+                                                key={p.id}
+                                                disabled={isLocked}
+                                                onClick={() => {
+                                                    if (isLocked) return;
+                                                    // Sound Effect: Play 'Select_Asset.wav'
+                                                    setSelectedPlayerId(p.id);
+                                                }}
+                                                className={`w-full flex items-center gap-3 p-3 rounded border transition-all duration-200 text-left group relative overflow-hidden ${isLocked
+                                                        ? "bg-red-900/10 border-red-900/30 opacity-50 cursor-not-allowed"
+                                                        : selectedPlayerId === p.id
+                                                            ? "bg-blue-500/20 border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.2)]"
+                                                            : "bg-white/5 border-transparent hover:border-white/20 hover:bg-white/10"
+                                                    }`}
+                                            >
+                                                <div className="w-10 h-10 rounded bg-gray-800 overflow-hidden flex-shrink-0 border border-white/10 relative">
+                                                    {p.photoUrl && <img src={p.photoUrl} className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all" />}
+                                                    {isLocked && (
+                                                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                                                            <Lock className="w-4 h-4 text-red-500" />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className={`text-sm font-bold truncate ${isLocked ? "text-gray-500" : "text-gray-200 group-hover:text-white"}`}>{p.fullName}</div>
+                                                        {isLocked && <span className="text-[8px] font-mono bg-red-500/20 text-red-500 px-1 rounded">LOCKED</span>}
+                                                    </div>
+                                                    <div className="text-[10px] text-gray-500 font-mono group-hover:text-blue-400">{p.primaryPos} • {p.editorialTeam}</div>
+                                                </div>
+                                                <div className="text-xs font-mono text-blue-500/70 group-hover:text-blue-400">{formatCurrency(p.marketValue)}</div>
+                                            </button>
+                                        );
+                                    })
                                 )}
                             </div>
 
@@ -280,7 +261,7 @@ export default function TradeOfferInterface({ listing, userPlayers, currentUserI
                         </div>
 
                         {/* MIDDLE: TRANSACTION FORECAST (THE HEART) */}
-                        <div className="flex flex-col justify-center space-y-6 relative order-2 lg:order-2 w-full lg:w-1/3">
+                        <div className="flex flex-col justify-start space-y-6 relative order-2 lg:order-2 w-full lg:w-1/3">
                             {/* Arrows */}
                             <div className="absolute top-1/2 -left-6 -translate-y-1/2 hidden lg:block text-blue-500/30 animate-pulse">
                                 <ArrowRight className="w-8 h-8" />
@@ -356,31 +337,33 @@ export default function TradeOfferInterface({ listing, userPlayers, currentUserI
                                 </div>
                             </div>
 
-                            {/* Task 5: Submit Button */}
-                            <button
-                                onClick={handleSubmit}
-                                disabled={isSubmitting || (!selectedPlayerId && credits <= 0)}
-                                className="w-full py-5 bg-green-600 hover:bg-green-500 text-black font-black uppercase tracking-[0.2em] text-lg clip-path-button relative overflow-hidden group disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 hover:shadow-[0_0_30px_rgba(34,197,94,0.4)]"
-                                style={{ clipPath: "polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px)" }}
-                            >
-                                {/* Ripple/Scanline Effect on Click/Hover */}
-                                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-                                <div className="absolute inset-0 bg-[linear-gradient(transparent_50%,rgba(255,255,255,0.2)_50%)] bg-[length:100%_4px] opacity-0 group-hover:opacity-100 pointer-events-none" />
-
-                                <span className="relative z-10 flex items-center justify-center gap-3">
-                                    {isSubmitting ? (
-                                        <>
-                                            <Loader2 className="w-5 h-5 animate-spin" />
-                                            TRANSMITTING OFFER...
-                                        </>
-                                    ) : (
-                                        <>
-                                            SUBMIT TRADE OFFER
-                                            <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                                        </>
-                                    )}
-                                </span>
-                            </button>
+                            {/* Task 5: Submit Button - GÜNCELLENMİŞ */}
+                            <div className="w-full">
+                                {yahooLeagueKey && sourceTeamKey && targetTeamKey && (
+                                    <TradeProposalManager
+                                        leagueKey={yahooLeagueKey}
+                                        // ARTIK DOĞRUDAN PROP OLARAK GELEN DEĞERİ KULLANIYORUZ
+                                        sourceTeamKey={sourceTeamKey}
+                                        targetTeamKey={targetTeamKey}
+                                        gameCode="nba" // Veya dinamik gameCode
+                                        offeredPlayerKeys={selectedPlayerId ? [selectedPlayerId] : []}
+                                        requestedPlayerKeys={[listing.player.id]}
+                                        listingId={listing.id}
+                                        offeredCredits={credits}
+                                        onSuccess={() => {
+                                            showToast("Trade flow complete", "success");
+                                            router.push("/market");
+                                            router.refresh();
+                                        }}
+                                    />
+                                )}
+                                {/* Hata durumunda kullanıcıya bilgi vermek için opsiyonel uyarı */}
+                                {(!sourceTeamKey || !targetTeamKey) && (
+                                    <div className="text-red-500 text-xs text-center p-2 border border-red-500/50 rounded bg-red-900/20">
+                                        ERROR: Team Keys Missing. You may not be in this league.
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
                         {/* RIGHT: TARGET ASSET (YOU RECEIVE) */}

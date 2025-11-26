@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getValidYahooToken } from "@/lib/auth-helpers";
-import { getFullUserStats, getTeamRoster, getPlayerNews, getLeagueTransactions } from "@/lib/yahooClient";
+import { getFullUserStats, getTeamRoster, getPlayerNews, getLeagueTransactions, getPendingTradeTransactions } from "@/lib/yahooClient";
 import { fetchAndProcessNews } from "@/lib/rss";
 import { revalidatePath } from "next/cache";
 
@@ -186,6 +186,9 @@ export async function syncUserLeagues() {
 
                     // Sync Roster for this team
                     await syncTeamRosterInternal(teamData.teamKey, accessToken, teamData.name, teamData.logoUrl);
+
+                    // Sync Pending Trades
+                    await syncPendingTradesForTeam(accessToken, leagueMeta.league_key, teamData.teamKey, league.id);
                 }
             }
         }
@@ -243,13 +246,15 @@ async function syncTeamRosterInternal(teamKey: string, accessToken: string, team
 
         const playerCount = playersWrapper.count;
 
+        // 1. ADIM: Güncel kadrodaki tüm oyuncu ID'lerini tutacağımız dizi
+        const currentRosterIds: string[] = [];
+
         for (let i = 0; i < playerCount; i++) {
             try {
                 const playerObj = playersWrapper[i.toString()].player;
                 const playerMeta = playerObj[0];
 
                 const getField = (arr: any[], key: string) => arr.find((x: any) => x.hasOwnProperty(key))?.[key];
-
                 const playerKey = getField(playerMeta, "player_key");
                 const name = getField(playerMeta, "name");
                 const editorialTeam = getField(playerMeta, "editorial_team_abbr");
@@ -403,6 +408,8 @@ async function syncTeamRosterInternal(teamKey: string, accessToken: string, team
                 if (!playerKey) continue;
 
                 // Upsert Player
+                // 2. ADIM: Oyuncuyu veritabanına kaydet/güncelle (Upsert)
+                // Oyuncu veritabanında yoksa "connect" işlemi hata verir, bu yüzden önce upsert şart.
                 const player = await prisma.player.upsert({
                     where: { id: playerKey },
                     create: {
@@ -437,20 +444,31 @@ async function syncTeamRosterInternal(teamKey: string, accessToken: string, team
                     }
                 });
 
-                // Connect to Team
-                await prisma.team.update({
-                    where: { yahooTeamKey: teamKey },
-                    data: {
-                        players: {
-                            connect: { id: player.id }
-                        }
-                    }
-                });
+                // 3. ADIM: Bu oyuncunun ID'sini listeye ekle
+                if (player) {
+                    currentRosterIds.push(player.id);
+                }
+
+
             } catch (innerError) {
                 console.error(`Error processing player index ${i} for team ${teamKey}`, innerError);
-                // Continue to next player
             }
         }
+        // 4. ADIM: Takım kadrosunu TOPLU GÜNCELLE (Kritik Düzeltme)
+        // 'set' komutu, ilişkili oyuncuları tam olarak bu listeye eşitler.
+        // Listede olmayan (eski) oyuncular otomatik olarak boşa çıkar (disconnect olur).
+        if (currentRosterIds.length > 0) {
+            await prisma.team.update({
+                where: { yahooTeamKey: teamKey },
+                data: {
+                    players: {
+                        set: currentRosterIds.map(id => ({ id }))
+                    }
+                }
+            });
+            console.log(`[ROSTER SYNC] Team ${teamName} roster updated. Count: ${currentRosterIds.length}`);
+        }
+
     } catch (error) {
         console.error(`Failed to sync roster for team ${teamKey}`, error);
     }
@@ -497,7 +515,7 @@ export async function syncPlayerNews() {
     return { success: true, count: newsCount };
 }
 
-async function syncLeagueTransactions(accessToken: string, leagueKey: string, leagueId: string) {
+export async function syncLeagueTransactions(accessToken: string, leagueKey: string, leagueId: string) {
     console.log(`[SYNC] Checking transactions for league ${leagueKey}...`);
     const transactionsData = await getLeagueTransactions(accessToken, leagueKey);
 
@@ -564,7 +582,9 @@ async function syncLeagueTransactions(accessToken: string, leagueKey: string, le
                     if (pKey === "count") continue;
                     const playerObj = playersData[pKey].player;
                     const playerMeta = playerObj[0];
-                    const transData = playerObj[1]?.transaction_data;
+
+                    const rawTransData = playerObj[1]?.transaction_data;
+                    const transData = Array.isArray(rawTransData) ? rawTransData[0] : rawTransData;
 
                     const existingItem = await prisma.yahooTradeItem.findFirst({
                         where: { tradeId: trade.id, playerKey: playerMeta.player_key }
@@ -603,7 +623,9 @@ async function syncLeagueTransactions(accessToken: string, leagueKey: string, le
 
                 // playerObj is array: [ { player_key, ... }, { transaction_data: ... } ]
                 const playerMeta = playerObj[0];
-                const transData = playerObj[1]?.transaction_data;
+
+                const rawTransData = playerObj[1]?.transaction_data;
+                const transData = Array.isArray(rawTransData) ? rawTransData[0] : rawTransData;
 
                 const playerKey = playerMeta?.player_key;
                 if (!playerKey) {
@@ -715,6 +737,78 @@ async function syncLeagueTransactions(accessToken: string, leagueKey: string, le
                     "New Trade Detected in League!",
                     `/league/${leagueId}`
                 );
+            }
+        }
+    }
+}
+
+async function syncPendingTradesForTeam(accessToken: string, leagueKey: string, teamKey: string, leagueId: string) {
+    console.log(`[SYNC] Checking pending trades for team ${teamKey}...`);
+    const data = await getPendingTradeTransactions(accessToken, leagueKey, teamKey);
+    const transactions = data?.fantasy_content?.league?.[1]?.transactions;
+
+    if (!transactions || transactions.count === 0) return;
+
+    for (const key in transactions) {
+        if (key === "count") continue;
+        const transaction = transactions[key].transaction;
+        if (!transaction) continue;
+
+        const meta = transaction[0];
+        const playersData = transaction[1]?.players;
+        const transactionKey = meta.transaction_key;
+
+        // Upsert YahooTrade
+        const trade = await prisma.yahooTrade.upsert({
+            where: { yahooTradeId: transactionKey },
+            create: {
+                yahooTradeId: transactionKey,
+                leagueId,
+                status: meta.status || 'proposed',
+                offeredBy: meta.trader_team_key,
+                offeredTo: meta.tradee_team_key,
+            },
+            update: {
+                status: meta.status || 'proposed'
+            }
+        });
+
+        // Create Items
+        if (playersData) {
+            for (const pKey in playersData) {
+                if (pKey === "count") continue;
+                const playerObj = playersData[pKey].player;
+                const playerMeta = Array.isArray(playerObj) ? playerObj[0] : playerObj;
+                // Handle nested array structure if present
+                const pMeta = Array.isArray(playerMeta) ? playerMeta[0] : playerMeta;
+
+                // Transaction data is usually in the second element if playerObj is an array
+                const rawTransData = Array.isArray(playerObj) && playerObj[1] ? playerObj[1].transaction_data : null;
+                // Yahoo returns transaction_data as an array [ { source_team_key: ... } ]
+                const transData = Array.isArray(rawTransData) ? rawTransData[0] : rawTransData;
+
+                if (!pMeta?.player_key || !transData) continue;
+
+                // Validate keys to prevent crash
+                if (!transData.source_team_key || !transData.destination_team_key) {
+                    console.warn(`[SYNC] Missing team keys for player ${pMeta?.player_key}`, transData);
+                    continue;
+                }
+
+                const existingItem = await prisma.yahooTradeItem.findFirst({
+                    where: { tradeId: trade.id, playerKey: pMeta.player_key }
+                });
+
+                if (!existingItem) {
+                    await prisma.yahooTradeItem.create({
+                        data: {
+                            tradeId: trade.id,
+                            playerKey: pMeta.player_key,
+                            senderTeamKey: transData.source_team_key,
+                            receiverTeamKey: transData.destination_team_key
+                        }
+                    });
+                }
             }
         }
     }

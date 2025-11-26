@@ -3,7 +3,7 @@ import { ArrowLeft } from "lucide-react";
 
 export default function NotFound() {
     return (
-        <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-4 relative overflow-hidden">
+        <div className="w-full h-full overflow-y-auto bg-black text-white flex flex-col items-center justify-center p-4 relative custom-scrollbar">
             {/* Background Effects */}
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-red-900/20 via-black to-black" />
             <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-10" />

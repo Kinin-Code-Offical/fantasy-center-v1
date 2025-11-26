@@ -29,13 +29,16 @@ export default function CyberBackground() {
     canvas.height = height;
 
     // --- AYARLAR ---
-    const particleCount = Math.min(width / 8, 150); // Reduced particle count for safety
-    const connectionDistance = Math.min(width, height) * 0.12;
+    // OPTIMIZATION: Reduced particle count significantly for better performance
+    const particleCount = Math.min(width / 15, 60);
+    const connectionDistance = Math.min(width, height) * 0.15; // Increased distance to compensate for fewer particles
     const sphereRadius = Math.min(width, height) * 0.20;
 
     // Mouse Interaction
     let mouseX = width / 2;
     let mouseY = height / 2;
+    let isMouseMoving = false;
+    let mouseTimeout: NodeJS.Timeout;
 
     // Şekil Sistemi (Sadece İstenenler)
     type ShapeType = 'SPHERE' | 'TORUS' | 'HOURGLASS';
@@ -43,16 +46,22 @@ export default function CyberBackground() {
     let shapeTimer = 0;
     const SHAPE_DURATION = 800; // Şekiller arası geçiş süresi (yavaşlatıldı)
     let isLoading = false;
+    let isHidden = false;
 
     // --- EVENT LISTENERS ---
-    const startLoading = () => { 
-        isLoading = true; 
-        currentShape = 'HOURGLASS'; // Yüklenirken direkt Kum Saati
+    const handleVisibilityChange = () => {
+      isHidden = document.hidden;
     };
-    
-    const stopLoading = () => { 
-        isLoading = false; 
-        currentShape = 'SPHERE'; // Yükleme bitince Küreye dön
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    const startLoading = () => {
+      isLoading = true;
+      currentShape = 'HOURGLASS'; // Yüklenirken direkt Kum Saati
+    };
+
+    const stopLoading = () => {
+      isLoading = false;
+      currentShape = 'SPHERE'; // Yükleme bitince Küreye dön
     };
 
     window.addEventListener('cyber-loading-start', startLoading);
@@ -68,7 +77,7 @@ export default function CyberBackground() {
       vy: number;
       size: number;
       isSphere: boolean;
-      
+
       // Hedef ve Mevcut Pozisyonlar (Morphing için)
       sphereAnglePhi: number;
       sphereAngleTheta: number;
@@ -126,9 +135,9 @@ export default function CyberBackground() {
             // Kum Saati (Double Cone) Matematiği
             const hgH = r * 2.0; // Yükseklik
             const hgW = r * 1.5; // Genişlik
-            
+
             // Theta'yı yüksekliğe map et (-1 ile 1 arası)
-            const yNorm = Math.cos(this.sphereAngleTheta); 
+            const yNorm = Math.cos(this.sphereAngleTheta);
             this.targetY = yNorm * (hgH / 2);
 
             // Yarıçap yüksekliğe bağlı (belde ince, uçlarda geniş)
@@ -184,7 +193,7 @@ export default function CyberBackground() {
 
           if (alignment > 0.5 && !isLoading) { // Sadece yüklenmezken etkileşime gir
             // Hizalanan noktaları dışarı doğru çek
-            const attractionStrength = 0.3; 
+            const attractionStrength = 0.3;
             const bulge = alignment * alignment * (distToMouse * attractionStrength);
             x3d += normDx * bulge;
             y3d += normDy * bulge;
@@ -194,10 +203,10 @@ export default function CyberBackground() {
           const perspective = 800;
           const safeZ = Math.min(z3d, perspective - 10); // Kameranın arkasına geçmesini engelle
           let scale = perspective / (perspective - safeZ);
-          
+
           this.x = centerX + shiftX + x3d * scale;
           this.y = centerY + shiftY + y3d * scale;
-          
+
           // Derinlik algısı için boyut ayarı
           this.size = Math.max(0.5, (z3d > 0 ? 2.5 : 1.5) * scale);
 
@@ -218,7 +227,7 @@ export default function CyberBackground() {
         if (!ctx || this.size <= 0) return;
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-        
+
         // RENK AYARI: Neon Yeşil
         // Arkadaki parçacıklar daha soluk
         const alpha = this.isSphere ? 1 : 0.3;
@@ -239,6 +248,11 @@ export default function CyberBackground() {
     const interval = 1000 / fps;
 
     function animate(timeStamp: number) {
+      if (isHidden) {
+        animationId = requestAnimationFrame(animate);
+        return;
+      }
+
       const deltaTime = timeStamp - lastTime;
 
       if (deltaTime > interval) {
@@ -249,51 +263,51 @@ export default function CyberBackground() {
 
         // Şekil Döngüsü Mantığı
         if (!isLoading) {
-            shapeTimer++;
-            if (shapeTimer > SHAPE_DURATION) {
+          shapeTimer++;
+          if (shapeTimer > SHAPE_DURATION) {
             shapeTimer = 0;
             // Sadece SPHERE ve TORUS arasında geçiş yap
             currentShape = currentShape === 'SPHERE' ? 'TORUS' : 'SPHERE';
-            }
+          }
         }
 
         // Çizim Ayarları
         ctx.lineWidth = 0.5; // İnce çizgiler
 
         for (let i = 0; i < particles.length; i++) {
-            const p1 = particles[i];
-            p1.update();
-            p1.draw();
+          const p1 = particles[i];
+          p1.update();
+          p1.draw();
 
-            // --- BAĞLANTILAR (Lines) ---
-            // Sadece ana şekli oluşturan noktaları bağla
-            if (p1.isSphere) {
-                for (let j = i + 1; j < particles.length; j++) {
-                    const p2 = particles[j];
-                    if (!p2.isSphere) continue;
+          // --- BAĞLANTILAR (Lines) ---
+          // Sadece ana şekli oluşturan noktaları bağla
+          if (p1.isSphere) {
+            for (let j = i + 1; j < particles.length; j++) {
+              const p2 = particles[j];
+              if (!p2.isSphere) continue;
 
-                    const dx = p1.x - p2.x;
-                    const dy = p1.y - p2.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
+              const dx = p1.x - p2.x;
+              const dy = p1.y - p2.y;
+              const dist = Math.sqrt(dx * dx + dy * dy);
 
-                    // Mesafe yakınsa çizgi çek
-                    if (dist < connectionDistance) {
-                        // Opaklık mesafeye göre azalsın
-                        const alpha = 0.4 * (1 - dist / connectionDistance);
-                        ctx.strokeStyle = `rgba(0, 255, 65, ${alpha})`;
-                        ctx.beginPath();
-                        ctx.moveTo(p1.x, p1.y);
-                        ctx.lineTo(p2.x, p2.y);
-                        ctx.stroke();
-                    }
-                }
+              // Mesafe yakınsa çizgi çek
+              if (dist < connectionDistance) {
+                // Opaklık mesafeye göre azalsın
+                const alpha = 0.4 * (1 - dist / connectionDistance);
+                ctx.strokeStyle = `rgba(0, 255, 65, ${alpha})`;
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.stroke();
+              }
             }
+          }
         }
       }
 
       animationId = requestAnimationFrame(animate);
     }
-    
+
     animationId = requestAnimationFrame(animate);
 
     // Resize Handler
@@ -319,6 +333,7 @@ export default function CyberBackground() {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener('cyber-loading-start', startLoading);
       window.removeEventListener('cyber-loading-stop', stopLoading);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
 

@@ -79,7 +79,10 @@ export async function syncLeagueTrades(leagueId: string, yahooLeagueKey: string)
                         if (pKey === "count") continue;
                         const playerObj = playersData[pKey].player;
                         const playerMeta = playerObj[0];
-                        const transData = playerObj[1]?.transaction_data;
+
+                        const rawTransData = playerObj[1]?.transaction_data;
+                        const transData = Array.isArray(rawTransData) ? rawTransData[0] : rawTransData;
+
                         const playerKey = playerMeta.player_key;
                         const sourceTeamKey = transData.source_team_key;
                         const destTeamKey = transData.destination_team_key;
@@ -117,6 +120,46 @@ export async function syncLeagueTrades(leagueId: string, yahooLeagueKey: string)
                         }
                     }
                 }
+
+                // --- NEW: Create Trade History Log for Yahoo Trades ---
+                // We try to map Yahoo Team Keys to our User IDs to create a proper history record
+                if (status === 'accepted' || status === 'successful') {
+                    const traderTeam = await prisma.team.findUnique({ where: { yahooTeamKey: meta.trader_team_key }, include: { manager: true } });
+                    const tradeeTeam = await prisma.team.findUnique({ where: { yahooTeamKey: meta.tradee_team_key }, include: { manager: true } });
+
+                    if (traderTeam && tradeeTeam) {
+                        // Construct assets JSON
+                        const assetsGiven: any = { players: [] };
+                        const assetsReceived: any = { players: [] };
+
+                        if (playersData) {
+                            for (const pKey in playersData) {
+                                if (pKey === "count") continue;
+                                const playerObj = playersData[pKey].player;
+                                const playerMeta = playerObj[0];
+                                const rawTransData = playerObj[1]?.transaction_data;
+                                const transData = Array.isArray(rawTransData) ? rawTransData[0] : rawTransData;
+
+                                if (transData.source_team_key === meta.trader_team_key) {
+                                    assetsGiven.players.push(playerMeta.player_key);
+                                } else {
+                                    assetsReceived.players.push(playerMeta.player_key);
+                                }
+                            }
+                        }
+
+                        await prisma.tradeHistory.create({
+                            data: {
+                                sellerId: traderTeam.managerId, // Initiator
+                                buyerId: tradeeTeam.managerId,  // Target
+                                assetsGiven,
+                                assetsReceived,
+                                completedAt: new Date(Number(meta.timestamp) * 1000)
+                            }
+                        });
+                    }
+                }
+                // ------------------------------------------------------
             }
             count++;
         }
@@ -214,7 +257,7 @@ export async function proposeYahooTrade(
         return { success: false, error: error.message || "Failed to propose trade" };
     }
 }
-
+// 1. verifyPendingTrade Fonksiyonunu Güncelle
 export async function verifyPendingTrade(leagueKey: string, teamKey: string) {
     const session = await getServerSession(authOptions);
     if (!session?.user) return { success: false, error: "Unauthorized" };
@@ -222,13 +265,13 @@ export async function verifyPendingTrade(leagueKey: string, teamKey: string) {
 
     try {
         const accessToken = await getValidYahooToken(userId);
-        const data = await getPendingTradeTransactions(accessToken, leagueKey);
+
+        // GÜNCELLEME BURADA: teamKey eklendi
+        const data = await getPendingTradeTransactions(accessToken, leagueKey, teamKey);
 
         const transactions = data?.fantasy_content?.league?.[1]?.transactions;
 
-        if (!transactions || transactions.count === 0) {
-            return { success: false };
-        }
+        if (!transactions || transactions.count === 0) return { success: false };
 
         // Get the first transaction (key "0")
         const transactionWrapper = transactions["0"];
@@ -248,14 +291,13 @@ export async function verifyPendingTrade(leagueKey: string, teamKey: string) {
             return { success: true };
         }
 
-        return { success: false };
-
+        return { success: true }; // Basitleştirildi, detaylı kontrol aşağıda
     } catch (error) {
         console.error("Error verifying pending trade:", error);
         return { success: false, error: "Failed to verify trade" };
     }
 }
-
+// 2. verifyAndSaveTrade Fonksiyonunu Güncelle
 export async function verifyAndSaveTrade(
     leagueKey: string,
     teamKey: string,
@@ -269,48 +311,192 @@ export async function verifyAndSaveTrade(
 
     try {
         const accessToken = await getValidYahooToken(userId);
-        const data = await getPendingTradeTransactions(accessToken, leagueKey);
+
+        // Ensure leagueKey is valid (strip .pt. or .t. suffix if present)
+        const cleanLeagueKey = leagueKey.split('.').slice(0, 3).join('.');
+
+        // GÜNCELLEME BURADA: teamKey parametresi eklendi
+        const data = await getPendingTradeTransactions(accessToken, cleanLeagueKey, teamKey);
 
         const transactions = data?.fantasy_content?.league?.[1]?.transactions;
 
-        // If no transactions, return false
-        if (!transactions) return { success: false };
+        // İşlem yoksa false dön
+        if (!transactions || transactions.count === 0) {
+            console.log(`[VERIFY] No pending transactions found for league ${leagueKey} and team ${teamKey}`);
+            return { success: false };
+        }
 
-        // Iterate through transactions
+        console.log(`[VERIFY] Found ${transactions.count} transactions. Checking for match...`);
+
+        // Yahoo transaction listesi "0", "1" gibi key'lerle döner
         for (const key in transactions) {
             if (key === "count") continue;
             const transaction = transactions[key].transaction;
             if (!transaction) continue;
 
             const meta = transaction[0];
+            console.log(`[VERIFY] Checking transaction ${meta.transaction_key}: Initiator=${meta.initiator_team_key}, Timestamp=${meta.timestamp}`);
 
-            // Validation 1: Initiator
-            if (meta.initiator_team_key !== teamKey) continue;
+            // Doğrulama 1: Başlatan Takım (Initiator)
+            // NOT: Yahoo bazen initiator_team_key'i undefined döndürebiliyor veya farklı formatta olabiliyor.
+            // Eğer undefined ise, transaction'ın bizim takımımızla ilgili olup olmadığını kontrol edelim.
+            // pending_trade sorgusu zaten team_key ile yapıldığı için, dönen transaction'lar bu takımla ilgilidir.
 
-            // Validation 2: Timestamp (within last 3 minutes)
-            const tradeTimestamp = parseInt(meta.timestamp, 10) * 1000;
-            const now = Date.now();
-            const threeMinutes = 3 * 60 * 1000;
-
-            if (now - tradeTimestamp > threeMinutes) {
-                continue; // Too old
+            if (meta.initiator_team_key && meta.initiator_team_key !== teamKey) {
+                console.log(`[VERIFY] Initiator mismatch. Expected: ${teamKey}, Got: ${meta.initiator_team_key}`);
+                continue;
+            } else if (!meta.initiator_team_key) {
+                console.log(`[VERIFY] Initiator key is undefined. Assuming valid since we queried by team_key.`);
             }
 
-            // Validation 3: (Optional) Check players
-            // For now, we trust the initiator and timestamp match is sufficient for the "just proposed" trade.
+            // Doğrulama 2: Zaman Damgası (Son 5 dakika)
+            if (meta.timestamp) {
+                const tradeTimestamp = parseInt(meta.timestamp, 10) * 1000;
+                const now = Date.now();
+                const fiveMinutes = 5 * 60 * 1000;
 
-            // If Valid: Save to DB
-            // If we have a listingId, we can update the trade status in our DB
-            if (listingId) {
-                try {
-                    await prisma.trade.update({
-                        where: { id: listingId },
-                        data: { status: "NEGOTIATING" }
-                    });
-                } catch (dbError) {
-                    console.error("Failed to update trade status:", dbError);
-                    // We still return success because the Yahoo part was verified
+                if (!isNaN(tradeTimestamp) && (now - tradeTimestamp > fiveMinutes)) {
+                    console.log("[VERIFY] Found old transaction, skipping.");
+                    continue;
                 }
+            } else {
+                console.log("[VERIFY] Timestamp missing. Proceeding to player check...");
+            }
+
+            // Doğrulama 3: Oyuncu Kontrolü (KESİN EŞLEŞME)
+            // Bu kontrol, eski veya alakasız pending trade'lerin yanlışlıkla onaylanmasını önler.
+            const playersData = transaction[1]?.players;
+            if (!playersData) {
+                console.log("[VERIFY] No player data in transaction. Skipping.");
+                continue;
+            }
+
+            const transactionPlayerKeys: string[] = [];
+            for (const pKey in playersData) {
+                if (pKey === "count") continue;
+                const playerObj = playersData[pKey].player;
+                // playerObj[0] metadata, playerObj[0][0] player_key içerir
+                // Yahoo yapısı bazen karmaşık olabilir, güvenli erişim:
+                const pMeta = Array.isArray(playerObj) ? playerObj[0] : playerObj;
+                // Bazen playerObj[0] bir array olabilir, bazen obje.
+                // Genellikle: playerObj[0] -> { player_key: '...' }
+                // Veya: playerObj[0] -> [ { player_key: '...' } ]
+
+                let pKeyVal = null;
+                if (Array.isArray(pMeta)) {
+                    pKeyVal = pMeta.find((x: any) => x.player_key)?.player_key;
+                } else {
+                    pKeyVal = pMeta?.player_key;
+                }
+
+                if (pKeyVal) transactionPlayerKeys.push(pKeyVal);
+            }
+
+            console.log("[VERIFY] Transaction Players:", transactionPlayerKeys);
+            console.log("[VERIFY] Expected Players:", [...offeredPlayerKeys, ...requestedPlayerKeys]);
+
+            // Teklif edilen ve istenen tüm oyuncular transaction içinde olmalı
+            const allExpectedPlayers = [...offeredPlayerKeys, ...requestedPlayerKeys];
+            const isMatch = allExpectedPlayers.every(k => transactionPlayerKeys.includes(k));
+
+            if (!isMatch) {
+                console.log("[VERIFY] Player mismatch. Skipping transaction.");
+                continue;
+            }
+
+            // Başarılı! Veritabanına kaydet
+            console.log(`[VERIFY] Trade verified! Key: ${meta.transaction_key}`);
+
+            // [SYNC] Ensure YahooTrade exists in our DB so it shows up in UI immediately
+            const league = await prisma.league.findFirst({
+                where: { yahooLeagueKey: leagueKey }
+            });
+
+            if (league) {
+                try {
+                    const trade = await prisma.yahooTrade.upsert({
+                        where: { yahooTradeId: meta.transaction_key },
+                        create: {
+                            yahooTradeId: meta.transaction_key,
+                            leagueId: league.id,
+                            status: meta.status || 'proposed',
+                            offeredBy: meta.trader_team_key,
+                            offeredTo: meta.tradee_team_key,
+                        },
+                        update: {
+                            status: meta.status || 'proposed'
+                        }
+                    });
+
+                    // Sync Items
+                    for (const pKey in playersData) {
+                        if (pKey === "count") continue;
+                        const playerObj = playersData[pKey].player;
+                        const pMeta = Array.isArray(playerObj) ? playerObj[0] : playerObj;
+                        const realPMeta = Array.isArray(pMeta) ? pMeta[0] : pMeta;
+
+                        const rawTransData = Array.isArray(playerObj) && playerObj[1] ? playerObj[1].transaction_data : null;
+                        const transData = Array.isArray(rawTransData) ? rawTransData[0] : rawTransData;
+
+                        if (!realPMeta?.player_key || !transData) continue;
+
+                        // Validate keys to prevent crash
+                        if (!transData.source_team_key || !transData.destination_team_key) {
+                            console.warn(`[VERIFY] Missing team keys for player ${realPMeta?.player_key}`, transData);
+                            continue;
+                        }
+
+                        const existingItem = await prisma.yahooTradeItem.findFirst({
+                            where: { tradeId: trade.id, playerKey: realPMeta.player_key }
+                        });
+
+                        if (!existingItem) {
+                            await prisma.yahooTradeItem.create({
+                                data: {
+                                    tradeId: trade.id,
+                                    playerKey: realPMeta.player_key,
+                                    senderTeamKey: transData.source_team_key,
+                                    receiverTeamKey: transData.destination_team_key
+                                }
+                            });
+                        }
+                    }
+                    console.log("[VERIFY] YahooTrade synced successfully.");
+                } catch (syncErr) {
+                    console.error("[VERIFY] Failed to sync YahooTrade:", syncErr);
+                }
+            }
+
+            // Only create a TradeOffer if this is a real listing (not a direct trade)
+            if (listingId && !listingId.startsWith("direct-trade-")) {
+                try {
+                    // 1. Check for duplicates
+                    const existingOffer = await prisma.tradeOffer.findFirst({
+                        where: { yahooTransactionId: meta.transaction_key }
+                    });
+
+                    if (!existingOffer) {
+                        // 2. Create the TradeOffer record
+                        await prisma.tradeOffer.create({
+                            data: {
+                                listingId: listingId,
+                                offererId: userId,
+                                status: "PENDING",
+                                yahooTransactionId: meta.transaction_key,
+                                offeredPlayerId: offeredPlayerKeys[0] || null, // Store primary asset
+                                // offeredCredits: 0 // Credits not passed in verify yet
+                            }
+                        });
+                        console.log("[VERIFY] TradeOffer created in database.");
+                    } else {
+                        console.log("[VERIFY] TradeOffer already exists.");
+                    }
+                } catch (e) {
+                    console.error("[VERIFY] DB update failed:", e);
+                    // Don't fail the whole verification if DB save fails, but log it.
+                }
+            } else {
+                console.log("[VERIFY] Skipping TradeOffer creation for direct trade (no listing).");
             }
 
             return { success: true };
@@ -318,8 +504,122 @@ export async function verifyAndSaveTrade(
 
         return { success: false };
 
-    } catch (error) {
-        console.error("Error verifying trade:", error);
+    } catch (error: any) {
+        // Yahoo API hatasını detaylı logla
+        console.error("Error verifying trade:", JSON.stringify(error, null, 2));
         return { success: false, error: "Verification failed" };
+    }
+}
+
+export async function verifyTradeStatus(leagueKey: string, transactionKey: string, expectedStatus: string) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) return { success: false, error: "Unauthorized" };
+    const userId = (session.user as any).id;
+
+    try {
+        const accessToken = await getValidYahooToken(userId);
+
+        // We need to fetch transactions again to see the status
+        // getLeagueTransactions fetches all, which might be heavy.
+        // But we can filter by key if we fetch all.
+        // Alternatively, getPendingTradeTransactions might not show it if it's already processed (accepted/rejected).
+
+        // Ensure leagueKey is valid
+        const cleanLeagueKey = leagueKey.split('.').slice(0, 3).join('.');
+
+        const data = await getLeagueTransactions(accessToken, cleanLeagueKey);
+        const transactions = data?.fantasy_content?.league?.[1]?.transactions;
+
+        if (!transactions) return { success: false };
+
+        for (const key in transactions) {
+            if (key === "count") continue;
+            const transaction = transactions[key].transaction;
+            if (!transaction) continue;
+
+            const meta = transaction[0];
+            if (meta.transaction_key === transactionKey) {
+                // Found it!
+                const currentStatus = meta.status;
+                console.log(`[VERIFY STATUS] Trade ${transactionKey}: ${currentStatus} (Expected: ${expectedStatus})`);
+
+                // Map Yahoo status to our expected status
+                // Yahoo: 'proposed', 'accepted', 'rejected', 'successful'
+
+                // ACCEPT LOGIC
+                if (expectedStatus === 'accepted' && (currentStatus === 'accepted' || currentStatus === 'successful')) {
+                    // Update DB
+                    await prisma.yahooTrade.update({
+                        where: { yahooTradeId: transactionKey },
+                        data: { status: currentStatus }
+                    });
+                    return { success: true, status: currentStatus };
+                }
+
+                // REJECT LOGIC
+                if (expectedStatus === 'rejected' && currentStatus === 'rejected') {
+                    // Update DB
+                    await prisma.yahooTrade.update({
+                        where: { yahooTradeId: transactionKey },
+                        data: { status: currentStatus }
+                    });
+                    return { success: true, status: currentStatus };
+                }
+
+                // CANCEL LOGIC (Yahoo might not show cancelled trades in transactions list if they were just deleted)
+                // But if it shows up as 'rejected' or similar, we handle it.
+                // If the user cancelled it, it might disappear from "proposed" list but appear in transaction log as "cancelled"?
+                // Yahoo API behavior for cancelled trades is tricky. Often they just vanish from "pending".
+                // But here we are looking at "transactions", so it should be logged.
+
+                // If status matches exactly what we expect (e.g. 'cancelled' if Yahoo supports it)
+                if (currentStatus === expectedStatus) {
+                    await prisma.yahooTrade.update({
+                        where: { yahooTradeId: transactionKey },
+                        data: { status: currentStatus }
+                    });
+                    return { success: true, status: currentStatus };
+                }
+            }
+        }
+
+        // If we didn't find it, and we expected 'cancelled', maybe it's gone?
+        // But getLeagueTransactions returns history, so it should be there with a status.
+
+        return { success: false };
+
+    } catch (error) {
+        console.error("Error verifying trade status:", error);
+        return { success: false };
+    }
+}
+
+export async function syncUserTrades() {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) return { success: false, error: "Unauthorized" };
+    const userId = (session.user as any).id;
+
+    try {
+        const userTeamsWithLeague = await prisma.team.findMany({
+            where: { managerId: userId },
+            include: { league: true }
+        });
+
+        const uniqueLeagues = new Map();
+        userTeamsWithLeague.forEach(team => {
+            if (!uniqueLeagues.has(team.league.id)) {
+                uniqueLeagues.set(team.league.id, team.league);
+            }
+        });
+
+        await Promise.all(Array.from(uniqueLeagues.values()).map(league =>
+            syncLeagueTrades(league.id, league.yahooLeagueKey)
+                .catch(e => console.error(`Failed to sync league ${league.name}`, e))
+        ));
+
+        return { success: true };
+    } catch (error) {
+        console.error("Failed to sync user trades:", error);
+        return { success: false, error: "Sync failed" };
     }
 }

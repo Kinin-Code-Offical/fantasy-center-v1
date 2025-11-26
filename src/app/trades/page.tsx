@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
 
 export default async function TradesPage() {
     const session = await getServerSession(authOptions);
-    
+
     if (session?.user?.email) {
         const user = await prisma.user.findUnique({
             where: { email: session.user.email },
@@ -27,15 +27,17 @@ export default async function TradesPage() {
     }
 
     return (
-        <div className="min-h-screen pt-24 pb-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-             <div className="fixed inset-0 z-0 pointer-events-none">
+        <div className="w-full h-auto md:h-full md:overflow-y-auto pt-24 pb-20 px-4 sm:px-6 lg:px-8 relative custom-scrollbar">
+            <div className="fixed inset-0 z-0 pointer-events-none">
                 <CyberBackground />
                 <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:50px_50px] opacity-[0.02] pointer-events-none" />
             </div>
             <div className="relative z-10">
-                <TradeConsole 
-                    incomingListings={data.incoming} 
-                    outgoingOffers={data.outgoing} 
+                <TradeConsole
+                    incomingListings={data.incoming}
+                    outgoingOffers={data.outgoing}
+                    externalTrades={data.external}
+                    userTeamKeys={data.userTeamKeys}
                 />
             </div>
         </div>

@@ -34,11 +34,14 @@ export default async function OfferPage({ params }: PageProps) {
         notFound();
     }
 
-    // Determine the league context
+    // 1. Lig Bağlamını ve Rakip Takımı Bul
+    // İlandaki oyuncunun hangi takımda olduğuna bakarak ligi buluyoruz
     const sellerTeam = listing.player.teams.find((t: any) => t.managerId === listing.sellerId);
+
     const targetLeagueId = sellerTeam?.leagueId;
     const targetLeagueName = sellerTeam?.league.name;
     const targetYahooLeagueKey = sellerTeam?.league.yahooLeagueKey;
+    const sellerTeamKey = sellerTeam?.yahooTeamKey; // <--- EKLENDİ: Rakip Takım Key
 
     const user = await prisma.user.findUnique({
         where: { email: session.user.email },
@@ -55,12 +58,58 @@ export default async function OfferPage({ params }: PageProps) {
         redirect("/login");
     }
 
-    // Filter user players to only those in the same league
-    const validUserPlayers = targetLeagueId
-        ? user.teams
-            .filter(t => t.leagueId === targetLeagueId)
-            .flatMap(t => t.players)
-        : [];
+    // 2. Kullanıcının Bu Ligdeki Takımını Bul
+    const userTeamInLeague = user.teams.find(t => t.leagueId === targetLeagueId);
+    const userTeamKey = userTeamInLeague?.yahooTeamKey; // <--- EKLENDİ: Senin Takım Key
+
+    // Kullanıcının oyuncularını filtrele
+    // Not: Oyunculara teamKey eklemeye gerek yok, yukarıdaki userTeamKey'i kullanacağız
+    const validUserPlayers = userTeamInLeague ? userTeamInLeague.players : [];
+
+    // 3. Fetch Active Market Offers (Internal)
+    const pendingMarketOffers = await prisma.tradeOffer.findMany({
+        where: {
+            offererId: user.id,
+            status: "PENDING"
+        },
+        select: {
+            offeredPlayerId: true
+        }
+    });
+
+    // 4. Fetch Active Yahoo Trades (External)
+    let pendingYahooTrades: any[] = [];
+    if (userTeamKey) {
+        pendingYahooTrades = await prisma.yahooTrade.findMany({
+            where: {
+                offeredBy: userTeamKey,
+                status: "proposed"
+            },
+            include: {
+                items: true
+            }
+        });
+    }
+
+    // Combine locked player IDs
+    // User requested to allow offering the same player in multiple trades.
+    // We only lock players if they are involved in a trade *for this specific listing* (preventing duplicate offers to same listing is handled elsewhere or logic can be minimal here).
+    // For now, we remove the global lock.
+    const lockedPlayerIds = new Set<string>();
+
+    /*
+    pendingMarketOffers.forEach(offer => {
+        if (offer.offeredPlayerId) lockedPlayerIds.add(offer.offeredPlayerId);
+    });
+
+    pendingYahooTrades.forEach(trade => {
+        trade.items.forEach((item: any) => {
+            if (item.senderTeamKey === userTeamKey) {
+                lockedPlayerIds.add(item.playerKey);
+            }
+        });
+    });
+    */
 
     return (
         <TradeOfferInterface
@@ -70,6 +119,10 @@ export default async function OfferPage({ params }: PageProps) {
             leagueName={targetLeagueName}
             leagueId={targetLeagueId}
             yahooLeagueKey={targetYahooLeagueKey}
+            // YENİ PROPLAR:
+            sourceTeamKey={userTeamKey}
+            targetTeamKey={sellerTeamKey}
+            lockedPlayerIds={Array.from(lockedPlayerIds)}
         />
     );
 }

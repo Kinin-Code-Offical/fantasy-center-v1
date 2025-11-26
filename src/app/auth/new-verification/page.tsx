@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { newVerification } from "@/lib/actions/new-verification";
 import Link from "next/link";
+import { signOut } from "next-auth/react";
 
 export default function NewVerificationPage() {
   const [error, setError] = useState<string | undefined>();
@@ -25,6 +26,7 @@ export default function NewVerificationPage() {
           setError(data.error);
         } else {
           setSuccess(data.message);
+          signOut({ redirect: false });
         }
       })
       .catch(() => {
@@ -74,7 +76,7 @@ export default function NewVerificationPage() {
             </div>
           )}
         </div>
-        
+
         <div className="mt-8 text-center text-xs opacity-50">
           SECURE CONNECTION // ENCRYPTED
         </div>

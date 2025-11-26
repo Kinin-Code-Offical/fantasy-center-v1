@@ -9,6 +9,7 @@ import { assertVerified } from "@/lib/auth/guard";
 import { logTransaction, logTrade } from "@/lib/logger";
 import { getValidYahooToken } from "@/lib/auth-helpers";
 import { getTradeRedirectUrl } from "@/lib/trade-url-helper";
+import { sendMarketNotificationEmail } from "@/lib/mail";
 
 export async function createListing(playerId: string, notes: string) {
     await assertVerified();
@@ -19,11 +20,14 @@ export async function createListing(playerId: string, notes: string) {
     // Verify ownership
     const userTeams = await prisma.team.findMany({
         where: { managerId: userId },
-        include: { players: true }
+        include: {
+            players: true,
+            league: true
+        }
     });
 
-    const ownsPlayer = userTeams.some(team => team.players.some(p => p.id === playerId));
-    if (!ownsPlayer) {
+    const owningTeam = userTeams.find(team => team.players.some(p => p.id === playerId));
+    if (!owningTeam) {
         throw new Error("You do not own this player.");
     }
 
@@ -40,14 +44,57 @@ export async function createListing(playerId: string, notes: string) {
         throw new Error("System Error: Asset is already deployed on the Trade Block.");
     }
 
-    await prisma.tradeListing.create({
+    const listing = await prisma.tradeListing.create({
         data: {
             sellerId: userId,
             playerId: playerId,
             notes: notes,
             status: "ACTIVE"
+        },
+        include: {
+            player: true
         }
     });
+
+    // Send Notification to League Members
+    // 1. Find all other teams in the same league
+    const leagueMembers = await prisma.team.findMany({
+        where: {
+            leagueId: owningTeam.leagueId,
+            managerId: { not: userId } // Exclude seller
+        },
+        include: {
+            manager: {
+                select: { email: true }
+            }
+        }
+    });
+
+    // 2. Send emails
+    const playerProfileUrl = `${process.env.NEXT_PUBLIC_APP_URL}/player/${playerId}`;
+
+    // Use Promise.allSettled to avoid failing the request if one email fails
+    await Promise.allSettled(leagueMembers.map(async member => {
+        // 1. Send Email
+        if (member.manager.email) {
+            await sendMarketNotificationEmail(
+                member.manager.email,
+                listing.player.fullName,
+                owningTeam.league.name,
+                listing.player.fantasyPoints || 0,
+                playerProfileUrl
+            );
+        }
+
+        // 2. Create In-App Notification
+        await createNotification(
+            member.managerId,
+            "MARKET_ALERT",
+            "NEW ASSET DEPLOYED",
+            `${listing.player.fullName} is now available in ${owningTeam.league.name}.`,
+            `/market/${listing.id}/offer`
+        );
+    }));
 
     revalidatePath("/market");
     return { success: true };
@@ -153,6 +200,21 @@ export async function makeOffer(listingId: string, offeredPlayerId: string, cred
     const offeredPlayerKeys = offeredPlayerId ? [offeredPlayerId] : [];
     const requestedPlayerKeys = [listing.playerId];
 
+    // 2.5 Check for Duplicate Offers (Same Players, Same Direction)
+    // Prevent spamming the same offer while one is pending
+    const existingDuplicateOffer = await prisma.tradeOffer.findFirst({
+        where: {
+            listingId: listingId,
+            offererId: userId,
+            offeredPlayerId: offeredPlayerId || null,
+            status: "PENDING"
+        }
+    });
+
+    if (existingDuplicateOffer) {
+        throw new Error("You already have a pending offer with these exact assets for this listing.");
+    }
+
     const redirectUrl = getTradeRedirectUrl(targetLeague.game.code, leagueKey, sourceTeamKey, targetTeamKey, offeredPlayerKeys, requestedPlayerKeys);
 
     // 3. Create Internal Offer
@@ -233,147 +295,61 @@ export async function acceptOffer(offerId: string) {
         return { success: true, message: "Please accept this trade on Yahoo directly.", redirectUrl };
     }
 
-    return { success: false, message: "Could not determine Yahoo league context. Please accept on Yahoo manually.", redirectUrl: undefined };
-
-    /*
-    // DEPRECATED: Local execution is disabled in favor of Sync-Only flow.
-    // Transaction
-    await prisma.$transaction(async (tx) => {
-        // 1. Validate & Fetch
-        // (Already fetched offer and listing above, but we need fresh data inside TX if we want strict serializability, 
-        // but for this logic, the outer fetch is likely fine as long as we check status)
-
-        // Double check status inside TX to prevent race conditions
-        const currentListing = await tx.tradeListing.findUnique({ where: { id: offer.listingId } });
-        if (!currentListing || currentListing.status !== "ACTIVE") {
-            throw new Error("Listing is no longer active.");
-        }
-
-        // 2. Asset Swap (The Core Logic)
-        const sellerTeams = await tx.team.findMany({
-            where: {
-                managerId: userId,
-                players: { some: { id: offer.listing.playerId } }
-            },
-            include: { players: true }
-        });
-
-        const offererTeams = await tx.team.findMany({
-            where: { managerId: offer.offererId },
-            include: { players: true }
-        });
-
-        let tradeExecuted = false;
-
-        for (const sTeam of sellerTeams) {
-            const oTeam = offererTeams.find(t => t.leagueId === sTeam.leagueId);
-
-            if (oTeam) {
-                // Check if offerer has the offered player in this league (if applicable)
-                const offererHasPlayer = offer.offeredPlayerId
-                    ? oTeam.players.some(p => p.id === offer.offeredPlayerId)
-                    : true;
-
-                if (offererHasPlayer) {
-                    // Step 2A: Seller Receives Offer Player (if any) & Loses Listing Player
-                    await tx.team.update({
-                        where: { id: sTeam.id },
-                        data: {
-                            players: {
-                                disconnect: { id: offer.listing.playerId },
-                                ...(offer.offeredPlayerId ? { connect: { id: offer.offeredPlayerId } } : {})
-                            }
-                        }
-                    });
-
-                    // Step 2B: Offerer Receives Listing Player & Loses Offer Player (if any)
-                    await tx.team.update({
-                        where: { id: oTeam.id },
-                        data: {
-                            players: {
-                                connect: { id: offer.listing.playerId },
-                                ...(offer.offeredPlayerId ? { disconnect: { id: offer.offeredPlayerId } } : {})
-                            }
-                        }
-                    });
-
-                    tradeExecuted = true;
-                }
-            }
-        }
-
-        if (!tradeExecuted) {
-            throw new Error("Trade failed: Users do not share a league where the assets exist.");
-        }
-
-        // 3. Credit Transfer (The Sweetener)
-        if (offer.offeredCredits > 0) {
-            // Subtract from offerer
-            await tx.user.update({
-                where: { id: offer.offererId },
-                data: { credits: { decrement: offer.offeredCredits } }
-            });
-            // Add to seller
-            await tx.user.update({
-                where: { id: userId },
-                data: { credits: { increment: offer.offeredCredits } }
-            });
-
-            // Log Financial Transaction
-            await logTransaction(userId, offer.offeredCredits, "TRADE_INCOME", `Trade Income: ${offer.listing.playerId}`, tx);
-            await logTransaction(offer.offererId, -offer.offeredCredits, "TRADE_EXPENSE", `Trade Expense: ${offer.listing.playerId}`, tx);
-        }
-
-        // Log Trade History
-        await logTrade(
-            userId,
-            offer.offererId,
-            { playerId: offer.listing.playerId }, // Assets Given by Seller
-            { playerId: offer.offeredPlayerId, credits: offer.offeredCredits }, // Assets Given by Buyer
-            tx
-        );
-
-        // 4. Cleanup & Status Update
-        await tx.tradeListing.update({
-            where: { id: offer.listingId },
-            data: { status: "COMPLETED" }
-        });
-
-        await tx.tradeOffer.update({
-            where: { id: offerId },
-            data: { status: "ACCEPTED" }
-        });
-
-        await tx.tradeOffer.updateMany({
-            where: { listingId: offer.listingId, id: { not: offerId } },
-            data: { status: "REJECTED" }
-        });
-
-        // 5. Notifications
-        // Notify Sender (Offerer)
-        await tx.notification.create({
-            data: {
-                userId: offer.offererId,
-                type: "TRADE_ACCEPTED",
-                title: "Trade Accepted",
-                message: `Your offer for ${offer.listing.playerId} has been accepted!`
-            }
-        });
-
-        // Notify Receiver (Seller - You)
-        await tx.notification.create({
-            data: {
-                userId: userId,
-                type: "TRADE_COMPLETE",
-                title: "Trade Complete",
-                message: `You have successfully traded ${offer.listing.playerId}.`
-            }
-        });
+    // If no Yahoo context found, assume it's a local trade (or fallback)
+    // Update Offer Status
+    await prisma.tradeOffer.update({
+        where: { id: offerId },
+        data: { status: "ACCEPTED" }
     });
 
+    // Update Listing Status
+    await prisma.tradeListing.update({
+        where: { id: offer.listingId },
+        data: { status: "COMPLETED" }
+    });
+
+    // Reject all other offers for this listing
+    await prisma.tradeOffer.updateMany({
+        where: {
+            listingId: offer.listingId,
+            id: { not: offerId },
+            status: "PENDING"
+        },
+        data: { status: "REJECTED" }
+    });
+
+    // Create Trade History Log
+    await prisma.tradeHistory.create({
+        data: {
+            sellerId: offer.listing.sellerId,
+            buyerId: offer.offererId,
+            assetsGiven: {
+                playerId: offer.listing.playerId,
+                type: "PLAYER"
+            },
+            assetsReceived: {
+                playerId: offer.offeredPlayerId,
+                credits: offer.offeredCredits,
+                type: "MIXED"
+            }
+        }
+    });
+
+    // Log Transaction
+    // await logTrade(offer.listing.sellerId, "TRADE_ACCEPTED", `Trade accepted for ${offer.listingId}`);
+
+    // Notify Offerer
+    await createNotification(
+        offer.offererId,
+        "TRADE_ACCEPTED",
+        "OFFER ACCEPTED",
+        `Your offer for the listing has been accepted!`,
+        `/trades`
+    );
+
     revalidatePath("/market");
-    return { success: true, message: "Transaction Complete" };
-    */
+    revalidatePath("/trades");
+    return { success: true };
 } export async function rejectOffer(offerId: string) {
     const session = await getServerSession(authOptions);
     if (!session?.user) return { success: false, message: "Unauthorized" };
@@ -381,7 +357,11 @@ export async function acceptOffer(offerId: string) {
 
     const offer = await prisma.tradeOffer.findUnique({
         where: { id: offerId },
-        include: { listing: true }
+        include: {
+            listing: {
+                include: { player: true }
+            }
+        }
     });
 
     if (!offer) throw new Error("Offer not found.");
@@ -416,6 +396,15 @@ export async function acceptOffer(offerId: string) {
         data: { status: "REJECTED" }
     });
 
+    // Notify Offerer
+    await createNotification(
+        offer.offererId,
+        "TRADE_REJECTED",
+        "OFFER REJECTED",
+        `Your offer for ${offer.listing.player.fullName || 'a player'} has been rejected.`,
+        `/trades`
+    );
+
     revalidatePath("/market");
     revalidatePath("/trades");
     return { success: true, redirectUrl };
@@ -428,7 +417,11 @@ export async function cancelOffer(offerId: string) {
 
     const offer = await prisma.tradeOffer.findUnique({
         where: { id: offerId },
-        include: { listing: true }
+        include: {
+            listing: {
+                include: { player: true }
+            }
+        }
     });
 
     if (!offer || offer.offererId !== userId) {
@@ -464,6 +457,15 @@ export async function cancelOffer(offerId: string) {
         where: { id: offerId },
         data: { status: "CANCELLED" }
     });
+
+    // Notify Seller (Listing Owner)
+    await createNotification(
+        offer.listing.sellerId,
+        "TRADE_CANCELLED",
+        "OFFER WITHDRAWN",
+        `An offer for ${offer.listing.player.fullName || 'your player'} has been withdrawn.`,
+        `/trades`
+    );
 
     revalidatePath("/market");
     revalidatePath("/trades");
@@ -592,7 +594,7 @@ export async function makeDirectOffer(targetPlayerId: string, offeredPlayerId: s
         targetManagerId,
         "DIRECT_TRADE_REQUEST",
         `New trade offer received for ${targetPlayer.fullName}`,
-        `/market/${listing.id}` // Or wherever they should view it. Maybe /trades?
+        `/trades`
     );
 
     // 6. Generate Redirect URL

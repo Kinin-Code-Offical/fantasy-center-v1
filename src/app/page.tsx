@@ -21,6 +21,21 @@ export default async function Home() {
   let isYahooConnected = false;
   let userTeams: any[] = [];
 
+  // Fetch public data for the landing page (Top Players)
+  const topPlayers = await prisma.player.findMany({
+    take: 5,
+    orderBy: { projectedPoints: 'desc' },
+    select: {
+      id: true,
+      fullName: true,
+      projectedPoints: true,
+      photoUrl: true,
+      editorialTeam: true,
+      primaryPos: true,
+      stats: true
+    }
+  });
+
   if (session?.user) {
     // --- ONBOARDING CHECK ---
     const userId = (session.user as any).id;
@@ -58,7 +73,7 @@ export default async function Home() {
   }
 
   return (
-    <main className="min-h-screen text-slate-200 overflow-hidden relative selection:bg-neon-cyan selection:text-black">
+    <main className="w-full h-full overflow-y-auto text-slate-200 relative selection:bg-neon-cyan selection:text-black custom-scrollbar">
       <div className="relative z-20">
         <Navbar />
 
@@ -68,7 +83,7 @@ export default async function Home() {
 
             {/* LEFT HUD (Stats Feed) */}
             <div className="hidden xl:block transition-opacity duration-500">
-              <StatPanel />
+              <StatPanel player={topPlayers[0]} />
             </div>
 
             {/* CENTER PANEL */}
@@ -78,7 +93,7 @@ export default async function Home() {
 
             {/* RIGHT HUD (Top Plans) */}
             <div className="hidden xl:block transition-opacity duration-500">
-              <PlayerPanel />
+              <PlayerPanel players={topPlayers.slice(0, 4)} />
             </div>
 
           </div>

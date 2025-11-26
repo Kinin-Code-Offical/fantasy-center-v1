@@ -90,11 +90,50 @@ export default async function LeaguePage({ params, searchParams }: { params: Pro
         const teamWithRoster = await prisma.team.findUnique({
             where: { id: displayedTeamId },
             include: {
-                players: true
+                players: {
+                    include: {
+                        teams: {
+                            include: {
+                                league: true
+                            }
+                        }
+                    }
+                }
             }
         });
         if (teamWithRoster) {
             rosterPlayers = teamWithRoster.players;
+        }
+    }
+
+    // Fetch User's Players (for trading context)
+    let userPlayers: any[] = [];
+    if (userId) {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            include: {
+                teams: {
+                    include: {
+                        players: true,
+                        league: true
+                    }
+                }
+            }
+        });
+        if (user) {
+            userPlayers = user.teams
+                .filter(team => team.leagueId === league.id)
+                .flatMap(team =>
+                    team.players.map(player => ({
+                        ...player,
+                        teamKey: team.yahooTeamKey,
+                        league: {
+                            id: team.league.id,
+                            name: team.league.name,
+                            yahooLeagueKey: team.league.yahooLeagueKey
+                        }
+                    }))
+                );
         }
     }
 
@@ -108,6 +147,17 @@ export default async function LeaguePage({ params, searchParams }: { params: Pro
         rank: team.rank,
         isUserTeam: team.managerId === userId
     }));
+
+    // Fetch Active Trades for this League (to prevent duplicates)
+    const activeYahooTrades = await prisma.yahooTrade.findMany({
+        where: {
+            leagueId: league.id,
+            status: "proposed"
+        },
+        include: {
+            items: true
+        }
+    });
 
     return (
         <div className="w-full h-auto md:h-full md:overflow-y-auto bg-[#050505] text-slate-200 pt-8 px-4 md:px-8 pb-20 relative font-sans custom-scrollbar">
@@ -206,7 +256,14 @@ export default async function LeaguePage({ params, searchParams }: { params: Pro
                                     {rosterPlayers.length} UNITS DEPLOYED
                                 </div>
                             </div>
-                            <RosterTable players={rosterPlayers} leagueId={league.id} isViewingRival={isViewingRival} />
+                            <RosterTable
+                                players={rosterPlayers}
+                                leagueId={league.id}
+                                isViewingRival={isViewingRival}
+                                userPlayers={userPlayers}
+                                targetTeamId={displayedTeamId}
+                                activeTrades={activeYahooTrades}
+                            />
                         </div>
 
                         {/* Sidebar - Standings & Info */}

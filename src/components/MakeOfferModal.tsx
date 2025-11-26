@@ -10,16 +10,38 @@ interface Props {
     listing: any;
     userPlayers: any[];
     onClose: () => void;
+    activeTrades?: any[];
 }
 
-export default function MakeOfferModal({ listing, userPlayers, onClose }: Props) {
+export default function MakeOfferModal({ listing, userPlayers, onClose, activeTrades = [] }: Props) {
     const { showToast } = useToast();
     const [selectedPlayerId, setSelectedPlayerId] = useState<string>("");
     const [credits, setCredits] = useState<number>(0);
     const [searchQuery, setSearchQuery] = useState("");
 
+    // Deduplicate userPlayers to prevent key collisions
+    const uniqueUserPlayers = useMemo(() => {
+        const seen = new Set();
+        return userPlayers.filter(p => {
+            if (seen.has(p.id)) return false;
+            seen.add(p.id);
+            return true;
+        });
+    }, [userPlayers]);
+
+    // Identify locked players (involved in active trades)
+    const lockedPlayerIds = useMemo(() => {
+        const ids = new Set<string>();
+        activeTrades.forEach(trade => {
+            trade.items?.forEach((item: any) => {
+                ids.add(item.playerKey);
+            });
+        });
+        return ids;
+    }, [activeTrades]);
+
     // Filter players for selection
-    const filteredPlayers = userPlayers.filter(p =>
+    const filteredPlayers = uniqueUserPlayers.filter(p =>
         p.fullName.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
@@ -48,45 +70,58 @@ export default function MakeOfferModal({ listing, userPlayers, onClose }: Props)
     }, [listing.player.marketValue, selectedPlayerId, credits, userPlayers]);
 
     return (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/95 md:p-4">
-            <div className="fixed inset-0 w-full h-full md:relative md:w-4/5 md:max-w-5xl md:h-[650px] bg-black/95 md:bg-black/80 md:border border-white/10 flex flex-col md:grid md:grid-cols-2 overflow-hidden md:rounded-xl shadow-none md:shadow-[0_0_50px_rgba(0,0,0,0.8)]">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/95 md:p-4 backdrop-blur-sm">
+            <div className="fixed inset-0 w-full h-full md:relative md:w-4/5 md:max-w-5xl md:h-[650px] bg-[#050a05] md:border border-neon-green/30 flex flex-col md:grid md:grid-cols-2 overflow-hidden md:rounded-xl shadow-[0_0_50px_rgba(0,255,65,0.1)] relative group">
+
+                {/* Cyber Glitch Overlay */}
+                <div className="absolute inset-0 pointer-events-none opacity-5 bg-[url('/grid.svg')] z-0" />
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-neon-green to-transparent opacity-50" />
 
                 {/* Decorative Corners (Desktop Only) */}
-                <div className="hidden md:block absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-green-500" />
-                <div className="hidden md:block absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-green-500" />
-                <div className="hidden md:block absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-green-500" />
-                <div className="hidden md:block absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-green-500" />
+                <div className="hidden md:block absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-neon-green z-20" />
+                <div className="hidden md:block absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-neon-green z-20" />
+                <div className="hidden md:block absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-neon-green z-20" />
+                <div className="hidden md:block absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-neon-green z-20" />
 
                 {/* Header */}
-                <div className="absolute top-0 left-0 right-0 h-14 border-b border-white/10 bg-black/50 flex items-center justify-between px-4 md:px-6 z-20 backdrop-blur-sm">
-                    <h2 className="text-sm font-black text-neon-cyan uppercase tracking-[0.2em] flex items-center gap-2">
-                        <span className="w-2 h-2 bg-neon-cyan rounded-full animate-pulse" />
-                        SECURE TRADE TERMINAL
-                    </h2>
-                    <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors p-2">
-                        <X className="w-5 h-5" />
+                <div className="absolute top-0 left-0 right-0 h-16 border-b border-neon-green/20 bg-black/80 flex items-center justify-between px-4 md:px-6 z-30 backdrop-blur-md">
+                    <div className="flex items-center gap-3">
+                        <div className="w-3 h-3 bg-neon-green rotate-45 shadow-[0_0_10px_#00ff41]" />
+                        <h2 className="text-lg font-black text-white uppercase tracking-[0.2em] font-mono flex items-center gap-2">
+                            SECURE TRADE TERMINAL
+                            <span className="text-neon-green text-xs animate-pulse">_v2.0</span>
+                        </h2>
+                    </div>
+                    <button onClick={onClose} className="text-gray-500 hover:text-neon-red transition-colors p-2 hover:bg-neon-red/10 rounded-full">
+                        <X className="w-6 h-6" />
                     </button>
                 </div>
 
                 {/* Left Column: Offer Configuration */}
-                <div className="w-full md:w-auto border-r border-white/10 flex flex-col bg-black/20 mt-14 flex-1 overflow-y-auto min-h-0 md:h-full">
+                <div className="w-full md:w-auto border-r border-neon-green/20 flex flex-col bg-black/40 mt-16 flex-1 overflow-y-auto min-h-0 md:h-full relative z-10 custom-scrollbar">
 
                     {/* Target Asset Summary */}
-                    <div className="p-4 border-b border-white/10 bg-white/5">
-                        <div className="text-[10px] font-bold text-neon-green uppercase tracking-widest mb-2 font-mono">
+                    <div className="p-6 border-b border-neon-green/10 bg-gradient-to-b from-neon-green/5 to-transparent">
+                        <div className="text-[10px] font-bold text-neon-green uppercase tracking-widest mb-3 font-mono flex items-center gap-2">
+                            <TrendingUp className="w-3 h-3" />
                             // INCOMING ASSET STREAM [RX]
                         </div>
-                        <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 rounded bg-gray-800 overflow-hidden border border-neon-green/30 relative group">
-                                <div className="absolute inset-0 bg-[linear-gradient(transparent_50%,rgba(0,255,65,0.1)_50%)] bg-[length:100%_4px] pointer-events-none z-10" />
+                        <div className="flex items-center gap-5">
+                            <div className="w-16 h-16 rounded-lg bg-black overflow-hidden border border-neon-green/50 relative group shadow-[0_0_15px_rgba(0,255,65,0.2)]">
+                                <div className="absolute inset-0 bg-[linear-gradient(transparent_50%,rgba(0,255,65,0.2)_50%)] bg-[length:100%_4px] pointer-events-none z-10" />
                                 {listing.player.photoUrl ? (
-                                    <img src={listing.player.photoUrl} className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all" />
-                                ) : <div className="w-full h-full flex items-center justify-center text-xl">👤</div>}
+                                    <img src={listing.player.photoUrl} className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500" />
+                                ) : <div className="w-full h-full flex items-center justify-center text-2xl">👤</div>}
                             </div>
                             <div>
-                                <div className="font-black text-white text-lg uppercase italic tracking-wider">{listing.player.fullName}</div>
-                                <div className="text-xs text-neon-green font-mono bg-green-900/20 px-2 py-0.5 rounded inline-block border border-neon-green/20">
-                                    VAL: {formatCurrency(listing.player.marketValue)}
+                                <div className="font-black text-white text-xl uppercase italic tracking-wider mb-1">{listing.player.fullName}</div>
+                                <div className="flex items-center gap-2">
+                                    <div className="text-xs text-neon-green font-mono bg-neon-green/10 px-2 py-1 rounded border border-neon-green/20">
+                                        VAL: {formatCurrency(listing.player.marketValue)}
+                                    </div>
+                                    <div className="text-[10px] text-gray-500 font-mono uppercase border border-white/10 px-2 py-1 rounded">
+                                        {listing.player.primaryPos || "FLEX"}
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -94,53 +129,56 @@ export default function MakeOfferModal({ listing, userPlayers, onClose }: Props)
 
                     {/* Player Selection */}
                     <div className="flex-1 flex flex-col min-h-0">
-                        <div className="p-3 border-b border-white/10 bg-black/40 sticky top-0 z-10">
-                            <div className="text-[10px] font-bold text-neon-cyan uppercase tracking-widest mb-2 flex items-center gap-2 font-mono">
+                        <div className="p-4 border-b border-white/10 bg-black/60 sticky top-0 z-20 backdrop-blur-sm">
+                            <div className="text-[10px] font-bold text-neon-cyan uppercase tracking-widest mb-3 flex items-center gap-2 font-mono">
+                                <ArrowRight className="w-3 h-3" />
                                 // OUTGOING ASSET STREAM [TX]
                             </div>
-                            <div className="relative">
-                                <Search className="w-3 h-3 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                            <div className="relative group">
+                                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-neon-cyan transition-colors" />
                                 <input
                                     type="text"
                                     placeholder="SEARCH DATABASE..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="w-full bg-black/60 border border-white/10 rounded-none py-2 pl-8 pr-3 text-xs text-white focus:outline-none focus:border-neon-cyan/50 placeholder:text-gray-700 font-mono uppercase"
+                                    className="w-full bg-black/80 border border-white/20 rounded-lg py-3 pl-10 pr-4 text-sm text-white focus:outline-none focus:border-neon-cyan focus:shadow-[0_0_15px_rgba(6,182,212,0.3)] placeholder:text-gray-700 font-mono uppercase transition-all"
                                 />
                             </div>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
-                            <div className="grid grid-cols-1 gap-2">
-                                <button
-                                    onClick={() => setSelectedPlayerId("")}
-                                    className={`w-full flex items-center gap-3 p-3 border-l-2 transition-all duration-200 text-left relative overflow-hidden ${selectedPlayerId === ""
-                                        ? "bg-neon-cyan/10 border-l-neon-cyan text-white"
-                                        : "bg-white/5 border-l-transparent hover:bg-white/10"
-                                        }`}
-                                    style={{ clipPath: "polygon(0 0, 100% 0, 100% 85%, 95% 100%, 0 100%)" }}
-                                >
-                                    <div className="w-10 h-10 bg-black/40 flex items-center justify-center border border-white/10">
-                                        <Minus className="w-4 h-4 text-gray-500" />
-                                    </div>
-                                    <div className="flex-1">
-                                        <div className="text-xs font-bold uppercase font-mono">NO ASSET LINKED</div>
-                                        <div className="text-[10px] text-gray-500 font-mono">CASH ONLY TRANSACTION</div>
-                                    </div>
-                                </button>
+                        <div className="flex-1 overflow-y-auto p-3 custom-scrollbar space-y-2">
+                            <button
+                                onClick={() => setSelectedPlayerId("")}
+                                className={`w-full flex items-center gap-4 p-3 border border-transparent rounded-lg transition-all duration-200 text-left relative overflow-hidden group ${selectedPlayerId === ""
+                                    ? "bg-neon-cyan/10 border-neon-cyan/50 text-white shadow-[0_0_15px_rgba(6,182,212,0.15)]"
+                                    : "bg-white/5 hover:bg-white/10 hover:border-white/20"
+                                    }`}
+                            >
+                                <div className="w-10 h-10 bg-black/40 flex items-center justify-center border border-white/10 rounded">
+                                    <Minus className="w-4 h-4 text-gray-500" />
+                                </div>
+                                <div className="flex-1">
+                                    <div className="text-xs font-bold uppercase font-mono group-hover:text-neon-cyan transition-colors">NO ASSET LINKED</div>
+                                    <div className="text-[10px] text-gray-500 font-mono">CASH ONLY TRANSACTION</div>
+                                </div>
+                                {selectedPlayerId === "" && <div className="w-2 h-2 bg-neon-cyan rounded-full animate-pulse" />}
+                            </button>
 
-                                {filteredPlayers.map(p => (
+                            {filteredPlayers.map(p => {
+                                const isLocked = lockedPlayerIds.has(p.id);
+                                return (
                                     <button
                                         key={p.id}
-                                        onClick={() => setSelectedPlayerId(p.id)}
-                                        className={`w-full flex items-center gap-3 p-3 border-l-2 transition-all duration-200 text-left group relative overflow-hidden ${selectedPlayerId === p.id
-                                            ? "bg-neon-cyan/20 border-l-neon-cyan text-white shadow-[inset_0_0_20px_rgba(6,182,212,0.2)]"
-                                            : "bg-white/5 border-l-transparent hover:border-l-white/20 hover:bg-white/10"
+                                        onClick={() => !isLocked && setSelectedPlayerId(p.id)}
+                                        disabled={isLocked}
+                                        className={`w-full flex items-center gap-4 p-3 border border-transparent rounded-lg transition-all duration-200 text-left group relative overflow-hidden ${selectedPlayerId === p.id
+                                            ? "bg-neon-cyan/10 border-neon-cyan/50 text-white shadow-[0_0_15px_rgba(6,182,212,0.15)]"
+                                            : isLocked
+                                                ? "bg-red-900/5 border-red-900/20 opacity-60 cursor-not-allowed grayscale"
+                                                : "bg-white/5 hover:bg-white/10 hover:border-white/20"
                                             }`}
-                                        style={{ clipPath: "polygon(0 0, 100% 0, 100% 85%, 95% 100%, 0 100%)" }}
                                     >
-                                        <div className="w-10 h-10 bg-black/20 overflow-hidden border border-black/10 relative">
-                                            <div className="absolute inset-0 bg-[linear-gradient(transparent_50%,rgba(0,0,0,0.5)_50%)] bg-[length:100%_2px] pointer-events-none z-10 opacity-50" />
+                                        <div className="w-10 h-10 bg-black/40 overflow-hidden border border-white/10 rounded relative">
                                             {p.photoUrl ? (
                                                 <img src={p.photoUrl} alt={p.fullName} className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all" />
                                             ) : (
@@ -148,30 +186,33 @@ export default function MakeOfferModal({ listing, userPlayers, onClose }: Props)
                                             )}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <div className="text-xs font-bold truncate font-mono">{p.fullName}</div>
+                                            <div className="text-xs font-bold truncate font-mono flex items-center gap-2 group-hover:text-neon-cyan transition-colors">
+                                                {p.fullName}
+                                                {isLocked && <Lock className="w-3 h-3 text-red-500" />}
+                                            </div>
                                             <div className={`text-[10px] font-mono ${selectedPlayerId === p.id ? "text-neon-cyan" : "text-gray-500"}`}>
                                                 VAL: {formatCurrency(p.marketValue)}
                                             </div>
                                         </div>
                                         {selectedPlayerId === p.id && (
-                                            <div className="absolute right-2 top-2 w-1.5 h-1.5 bg-neon-cyan rounded-full animate-pulse" />
+                                            <div className="w-2 h-2 bg-neon-cyan rounded-full animate-pulse shadow-[0_0_5px_#06b6d4]" />
                                         )}
                                     </button>
-                                ))}
-                            </div>
+                                );
+                            })}
                         </div>
                     </div>
 
                     {/* Credits Input */}
-                    <div className="p-4 border-t border-white/10 bg-black/40">
-                        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-2 font-mono">
+                    <div className="p-6 border-t border-white/10 bg-black/60 backdrop-blur-sm">
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2 font-mono">
                             <Wallet className="w-3 h-3" /> Additional Credits
                         </label>
-                        <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neon-green font-mono">$</span>
+                        <div className="relative group">
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neon-green font-mono text-lg">$</span>
                             <input
                                 type="number"
-                                className="w-full bg-black border border-white/20 rounded-none py-2 pl-6 pr-3 text-white text-sm focus:border-neon-green outline-none font-mono"
+                                className="w-full bg-black border border-white/20 rounded-lg py-3 pl-8 pr-4 text-white text-lg focus:border-neon-green focus:shadow-[0_0_15px_rgba(0,255,65,0.2)] outline-none font-mono transition-all"
                                 placeholder="0"
                                 value={credits}
                                 onChange={(e) => setCredits(Number(e.target.value))}
@@ -181,51 +222,49 @@ export default function MakeOfferModal({ listing, userPlayers, onClose }: Props)
                 </div>
 
                 {/* Right Column: Trade Analysis */}
-                <div className="flex-1 p-6 md:p-8 flex flex-col justify-center bg-black mt-14 md:mt-14 relative overflow-hidden">
+                <div className="flex-1 p-8 flex flex-col justify-center bg-[#0a0f0a] mt-16 md:mt-16 relative overflow-hidden">
                     {/* Background Grid */}
-                    <div className="absolute inset-0 bg-[linear-gradient(rgba(0,255,65,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(0,255,65,0.03)_1px,transparent_1px)] bg-[length:20px_20px] pointer-events-none" />
+                    <div className="absolute inset-0 bg-[linear-gradient(rgba(0,255,65,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(0,255,65,0.03)_1px,transparent_1px)] bg-[length:30px_30px] pointer-events-none" />
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,255,65,0.05),transparent_70%)] pointer-events-none" />
 
-                    <div className="max-w-sm mx-auto w-full space-y-8 relative z-10">
+                    <div className="max-w-sm mx-auto w-full space-y-10 relative z-10">
 
-                        <div className="text-center space-y-4">
-                            <div className="text-xs font-bold text-neon-cyan uppercase tracking-widest font-mono flex items-center justify-center gap-2">
-                                <Terminal className="w-4 h-4" />
-                                // QUANTUM PROCESSOR [ANALYSIS]
+                        <div className="text-center space-y-6">
+                            <div className="text-xs font-bold text-neon-cyan uppercase tracking-[0.2em] font-mono flex items-center justify-center gap-2 border border-neon-cyan/30 py-1 px-3 rounded-full inline-block bg-neon-cyan/5">
+                                <Terminal className="w-3 h-3" />
+                                QUANTUM PROCESSOR [ANALYSIS]
                             </div>
 
-                            <div className="relative py-4">
-                                <div className={`text-5xl md:text-6xl font-black tracking-tighter font-mono relative z-10 ${tradeAnalytics.netValue > 0 ? "text-neon-green drop-shadow-[0_0_10px_rgba(0,255,65,0.5)]" : "text-red-500 drop-shadow-[0_0_10px_rgba(239,68,68,0.5)]"
+                            <div className="relative py-6">
+                                <div className={`text-6xl md:text-7xl font-black tracking-tighter font-mono relative z-10 transition-all duration-500 ${tradeAnalytics.netValue > 0 ? "text-neon-green drop-shadow-[0_0_20px_rgba(0,255,65,0.6)]" : "text-red-500 drop-shadow-[0_0_20px_rgba(239,68,68,0.6)]"
                                     }`}>
                                     {tradeAnalytics.netValue > 0 ? "+" : ""}{formatCurrency(tradeAnalytics.netValue)}
                                 </div>
                                 {/* Gauge Background Effect */}
-                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-gradient-to-b from-transparent via-white/5 to-transparent blur-xl -z-10" />
+                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] bg-gradient-to-b from-transparent via-white/5 to-transparent blur-2xl -z-10 rounded-full" />
                             </div>
 
-                            <div className="font-mono text-xs text-gray-400 max-w-[280px] mx-auto leading-relaxed">
-                                <span className="text-neon-cyan">{">"} SYSTEM ANALYSIS:</span> Trade protocol indicates {tradeAnalytics.netValue > 0 ? "significant boost" : "potential deficit"} to roster efficiency vectors.
+                            <div className="font-mono text-xs text-gray-400 max-w-[280px] mx-auto leading-relaxed border-l-2 border-gray-800 pl-4 text-left">
+                                <span className="text-neon-cyan font-bold">{">"} SYSTEM ANALYSIS:</span> Trade protocol indicates {tradeAnalytics.netValue > 0 ? "significant boost" : "potential deficit"} to roster efficiency vectors.
                             </div>
                         </div>
 
                         {/* Transaction Log Console */}
-                        <div className="bg-black border border-neon-green/30 p-4 font-mono text-xs relative overflow-hidden">
-                            <div className="absolute top-0 left-0 w-full h-0.5 bg-neon-green/50" />
-                            <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-neon-green" />
-                            <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-neon-green" />
+                        <div className="bg-black/80 border border-neon-green/30 p-5 font-mono text-xs relative overflow-hidden rounded-lg shadow-lg">
+                            <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-neon-green to-transparent opacity-50" />
 
-                            <div className="space-y-2 opacity-90">
-                                <div className="flex justify-between text-gray-400">
+                            <div className="space-y-3 opacity-90">
+                                <div className="flex justify-between text-gray-400 border-b border-white/5 pb-2">
                                     <span>[LOG]: TARGET_ASSET_VAL</span>
-                                    <span className="text-white">{formatCurrency(listing.player.marketValue)}</span>
+                                    <span className="text-white font-bold">{formatCurrency(listing.player.marketValue)}</span>
                                 </div>
-                                <div className="flex justify-between text-gray-400">
+                                <div className="flex justify-between text-gray-400 border-b border-white/5 pb-2">
                                     <span>[LOG]: OFFER_TOTAL_VAL</span>
-                                    <span className="text-white">{formatCurrency(tradeAnalytics.outgoingTotal)}</span>
+                                    <span className="text-white font-bold">{formatCurrency(tradeAnalytics.outgoingTotal)}</span>
                                 </div>
-                                <div className="h-px bg-neon-green/20 my-2" />
-                                <div className="flex justify-between font-bold">
+                                <div className="flex justify-between font-bold pt-1">
                                     <span className="text-neon-cyan">[RES]: NET_IMPACT_CALC</span>
-                                    <span className={tradeAnalytics.netValue > 0 ? "text-neon-green" : "text-red-500"}>
+                                    <span className={`px-2 py-0.5 rounded ${tradeAnalytics.netValue > 0 ? "bg-neon-green/20 text-neon-green" : "bg-red-500/20 text-red-500"}`}>
                                         {tradeAnalytics.netValue > 0 ? "POSITIVE" : "NEGATIVE"}
                                     </span>
                                 </div>
@@ -243,7 +282,8 @@ export default function MakeOfferModal({ listing, userPlayers, onClose }: Props)
                                 const selectedPlayer = userPlayers.find(p => p.id === selectedPlayerId);
                                 if (selectedPlayer) {
                                     sourceTeamKey = selectedPlayer.teamKey;
-                                    leagueKey = selectedPlayer.league?.leagueKey;
+                                    // Handle both property names just in case
+                                    leagueKey = selectedPlayer.league?.yahooLeagueKey || selectedPlayer.league?.leagueKey;
                                     leagueId = selectedPlayer.league?.id;
                                 }
                             } else {
@@ -269,6 +309,30 @@ export default function MakeOfferModal({ listing, userPlayers, onClose }: Props)
 
                             const gameCode = listing.player.gameId.split('.')[0];
                             const canTrade = sourceTeamKey && targetTeamKey && leagueKey && gameCode;
+
+                            // Check if user already has an active offer for this listing
+                            const existingOffer = listing.offers?.find((o: any) =>
+                                o.offeredBy === sourceTeamKey &&
+                                o.status === 'PENDING'
+                            );
+
+                            if (existingOffer) {
+                                return (
+                                    <div className="w-full py-4 bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 text-center font-bold uppercase tracking-widest">
+                                        OFFER ALREADY PENDING
+                                    </div>
+                                );
+                            }
+
+                            // Check if target player is locked
+                            if (lockedPlayerIds.has(listing.player.id)) {
+                                return (
+                                    <div className="w-full py-4 bg-red-500/10 border border-red-500/20 text-red-500 text-center font-bold uppercase tracking-widest flex flex-col gap-1">
+                                        <span>TARGET ASSET LOCKED</span>
+                                        <span className="text-[10px] opacity-70">Player involved in active trade</span>
+                                    </div>
+                                );
+                            }
 
                             return canTrade ? (
                                 <TradeProposalManager
